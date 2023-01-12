@@ -5,12 +5,21 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "cli",
+            "name": "cli.safepool",
             "type": "go",
             "request": "launch",
             "mode": "auto",
             "console": "integratedTerminal",
-            "program": "${workspaceFolder}/safepool.cli",
+            "program": "${workspaceFolder}/cli",
+            "args": ["-v", "2", "-d", "safepool.db"],
+        },
+        {
+            "name": "cli.aurora",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "console": "integratedTerminal",
+            "program": "${workspaceFolder}/cli",
             "args": ["-v", "2", "-d", "aurora.db"],
         }
     ]
