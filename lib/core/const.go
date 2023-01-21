@@ -10,7 +10,7 @@ func init() {
 	snowflake.SetStartTime(SnowFlakeStart)
 }
 
-var SnowFlakeStart = time.Date(2022, 2, 3, 0, 0, 0, 0, time.UTC)
+var SnowFlakeStart = time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
 
 const UsersFilename = "U"
 const UsersFilesign = "U.sign"

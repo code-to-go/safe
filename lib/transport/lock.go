@@ -19,14 +19,14 @@ func waitLock(e Exchanger, name string) {
 	var id uint64
 	var shot time.Time
 
-	for shot.IsZero() && time.Since(shot) > c.Span {
+	for shot.IsZero() && core.Since(shot) > c.Span {
 		id = c.Id
 		err = ReadJSON(e, name, &c, nil)
 		if err != nil {
 			return
 		}
 		if c.Id != id {
-			shot = time.Now()
+			shot = core.Now()
 		}
 		time.Sleep(time.Second)
 	}

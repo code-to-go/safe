@@ -92,7 +92,7 @@ func (c *Chat) SendMessage(content string, contentType string, attachments [][]b
 	m := Message{
 		Id:          snowflake.ID(),
 		Author:      c.Pool.Self.Id(),
-		Time:        time.Now(),
+		Time:        core.Now(),
 		Content:     content,
 		ContentType: contentType,
 		Attachments: attachments,

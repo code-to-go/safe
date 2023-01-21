@@ -38,37 +38,69 @@ type S3 struct {
 	touch    map[string]time.Time
 }
 
-func getAWSConfig(c S3Config) *aws.Config {
-	s3c := aws.Config{}
-	if c.Region != "" {
-		s3c.Region = aws.String(c.Region)
+func ParseS3Url(s string) (S3Config, error) {
+	u, err := url.Parse(s)
+	if err != nil {
+		return S3Config{}, err
 	}
-	if c.AccessKey != "" && c.Secret != "" {
+
+	password, _ := u.User.Password()
+	return S3Config{
+		Bucket:    u.Path,
+		AccessKey: u.User.Username(),
+		Secret:    password,
+	}, nil
+}
+
+func S3ToUrl(c S3Config) string {
+	return fmt.Sprintf("s3://%s@%s/%s#region-%s", c.AccessKey, c.Endpoint, c.Bucket, c.Region)
+}
+
+func getAWSConfig(u *url.URL) *aws.Config {
+
+	accessKey := u.User.Username()
+	secret, hasSecret := u.User.Password()
+	params := u.Query()
+
+	s3c := aws.Config{}
+	if params.Has("region") {
+		s3c.Region = aws.String(params.Get("region"))
+	}
+
+	if accessKey != "" && hasSecret {
 		s3c.Credentials = credentials.NewStaticCredentials(
-			c.AccessKey,
-			c.Secret,
+			accessKey,
+			secret,
 			"",
 		)
 	}
-	if c.Endpoint != "" {
-		s3c.Endpoint = aws.String(c.Endpoint)
+	if u.Host != "" {
+		s3c.Endpoint = aws.String(u.Host)
 	}
-	s3c.DisableSSL = aws.Bool(c.DisableSSL)
+	if params.Has("disableSSL") {
+		s3c.DisableSSL = aws.Bool(true)
+	}
+
 	return &s3c
 }
 
-func NewS3(c S3Config) (Exchanger, error) {
-	url := fmt.Sprintf("s3://%s@%s/%s#region-%s", c.AccessKey, c.Endpoint, c.Bucket, c.Region)
-	sess, err := session.NewSession(getAWSConfig(c))
-	if core.IsErr(err, "cannot create S3 session for %s:%v", url) {
+func NewS3(connectionUrl string) (Exchanger, error) {
+	u, err := url.Parse(connectionUrl)
+	if core.IsErr(err, "invalid url '%s': %v", connectionUrl) {
+		return nil, err
+	}
+
+	repr := fmt.Sprintf("s3://%s@%s/%s", u.User, u.Host, u.Path)
+	sess, err := session.NewSession(getAWSConfig(u))
+	if core.IsErr(err, "cannot create S3 session for %s:%v", repr) {
 		return nil, err
 	}
 
 	s := &S3{
 		uploader: s3manager.NewUploader(sess),
 		svc:      s3.New(sess),
-		url:      url,
-		bucket:   c.Bucket,
+		url:      repr,
+		bucket:   u.Path,
 		touch:    map[string]time.Time{},
 	}
 	err = s.createBucketIfNeeded()

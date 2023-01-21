@@ -6,13 +6,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/code-to-go/safepool.lib/core"
 	"github.com/code-to-go/safepool.lib/security"
 	"github.com/code-to-go/safepool.lib/sql"
-	"github.com/code-to-go/safepool.lib/transport"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 )
+
+var config = Config{
+	Name:   "test.safepool.net/public",
+	Public: []string{"sftp://sftp_user:11H^m63W5vAL@localhost/sftp_user"},
+}
 
 func TestSafeCreation(t *testing.T) {
 	sql.DbName = "safepool.test.db"
@@ -24,10 +29,7 @@ func TestSafeCreation(t *testing.T) {
 	self, err := security.NewIdentity("test")
 	assert.NoErrorf(t, err, "cannot create identity")
 
-	c, err := transport.ReadConfig("../../../credentials/s3-2.yaml")
-	assert.NoErrorf(t, err, "Cannot load S3 config: %v", err)
-
-	err = Define(Config{"test.safepool.net/public", []transport.Config{c}})
+	err = Define(config)
 	assert.NoErrorf(t, err, "Cannot define pool: %v", err)
 
 	ForceCreation = true
@@ -68,11 +70,7 @@ func BenchmarkSafe(b *testing.B) {
 	self, err := security.NewIdentity("test")
 	assert.NoErrorf(b, err, "cannot create identity")
 
-	//c, err := transport.ReadConfig("../../credentials/s3-2.yaml")
-	c, err := transport.ReadConfig("../../credentials/local.yaml")
-	assert.NoErrorf(b, err, "Cannot load S3 config: %v", err)
-
-	err = Define(Config{"test.safepool.net/public", []transport.Config{c}})
+	err = Define(config)
 	assert.NoErrorf(b, err, "Cannot define pool: %v", err)
 
 	ForceCreation = true
@@ -113,28 +111,23 @@ func TestSafeReplica(t *testing.T) {
 	self, err := security.NewIdentity("test")
 	assert.NoErrorf(t, err, "cannot create identity")
 
-	s3, err := transport.ReadConfig("../../credentials/s3-2.yaml")
-	assert.NoErrorf(t, err, "Cannot load S3 config: %v", err)
-	local, err := transport.ReadConfig("../../credentials/local.yaml")
-	assert.NoErrorf(t, err, "Cannot load local config: %v", err)
-
-	err = Define(Config{"test.safepool.net/public", []transport.Config{s3, local}})
+	err = Define(config)
 	assert.NoErrorf(t, err, "Cannot define pool: %v", err)
 
 	ForceCreation = true
 	ReplicaPeriod = time.Second * 5
 
-	now := time.Now()
+	now := core.Now()
 	s, err := Create(self, "test.safepool.net/public")
-	creationTime := time.Since(now)
+	creationTime := core.Since(now)
 	assert.NoErrorf(t, err, "Cannot create pool: %v", err)
 	defer s.Close()
 	defer s.Delete()
 
 	s1 := "just a simple test"
-	now = time.Now()
+	now = core.Now()
 	_, err = s.Send("test.txt", bytes.NewBufferString(s1), nil)
-	postTime := time.Since(now)
+	postTime := core.Since(now)
 	assert.NoErrorf(t, err, "Cannot create post: %v", err)
 
 	time.Sleep(5 * time.Minute)

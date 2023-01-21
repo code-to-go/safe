@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -24,12 +25,17 @@ type Local struct {
 	touch map[string]time.Time
 }
 
-func NewLocal(config LocalConfig) (Exchanger, error) {
-	base := config.Base
+func NewLocal(connectionUrl string) (Exchanger, error) {
+	u, err := url.Parse(connectionUrl)
+	if core.IsErr(err, "invalid URL: %v") {
+		return nil, err
+	}
+
+	base := u.Path
 	if base == "" {
 		base = "/"
 	}
-	return &Local{base, "file://" + base, map[string]time.Time{}}, nil
+	return &Local{base, connectionUrl, map[string]time.Time{}}, nil
 }
 
 func (l *Local) Touched(name string) bool {
@@ -40,7 +46,7 @@ func (l *Local) Touched(name string) bool {
 	}
 	if stat.ModTime().After(l.touch[name]) {
 		if !core.IsErr(l.Write(touchFile, &bytes.Buffer{}), "cannot write touch file: %v") {
-			l.touch[name] = time.Now()
+			l.touch[name] = core.Now()
 		}
 		return true
 	}

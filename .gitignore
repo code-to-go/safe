@@ -5,3 +5,4 @@ safepool.ui/build
 safepool.ui/.gitignore
 safepool.ui/frontend/package-lock.json
 safepool.lib/data/__debug_bin
+cli/__debug_bin

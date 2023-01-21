@@ -1,11 +1,9 @@
 package pool
 
-import "github.com/code-to-go/safepool.lib/transport"
-
-func Save(name string, configs []transport.Config) error {
-	return sqlSave(name, configs)
+func Save(name string, config Config) error {
+	return sqlSave(name, config)
 }
 
-func Load(name string) ([]transport.Config, error) {
+func Load(name string) (Config, error) {
 	return sqlLoad(name)
 }

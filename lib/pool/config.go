@@ -5,16 +5,13 @@ import (
 )
 
 func Define(c Config) error {
-	return sqlSave(c.Name, c.Configs)
+	return sqlSave(c.Name, c)
 }
 
 func GetConfig(name string) (Config, error) {
-	configs, err := sqlLoad(name)
+	c, err := sqlLoad(name)
 	if core.IsErr(err, "cannot load config for pool '%s'", name) {
 		return Config{}, err
 	}
-	return Config{
-		Name:    name,
-		Configs: configs,
-	}, nil
+	return c, nil
 }

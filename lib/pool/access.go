@@ -2,7 +2,6 @@ package pool
 
 import (
 	"bytes"
-	"fmt"
 	"hash"
 	"math/rand"
 	"path"
@@ -40,11 +39,13 @@ type AccessFile struct {
 	Keystore    []byte
 }
 
+const IdentityFolder = "identities"
+
 func (p *Pool) syncIdentities() error {
 	security.SetIdentity(p.Self)
 	security.Trust(p.Self, true)
 
-	name := path.Join(p.Name, fmt.Sprintf("%s.identity", p.Self.Id()))
+	name := path.Join(p.Name, IdentityFolder, p.Self.Id())
 	_, err := p.e.Stat(name)
 	if err != nil {
 		err = p.writeIdentity(name, p.Self)
@@ -62,7 +63,7 @@ func (p *Pool) syncIdentities() error {
 }
 
 func (p *Pool) importIdentities() error {
-	ls, err := p.e.ReadDir(p.Name, 0)
+	ls, err := p.e.ReadDir(path.Join(p.Name, IdentityFolder), 0)
 	if core.IsErr(err, "cannot list files from %s: %v", p.e) {
 		return err
 	}
@@ -79,17 +80,12 @@ func (p *Pool) importIdentities() error {
 	selfId := p.Self.Id()
 	for _, l := range ls {
 		n := l.Name()
-		if path.Ext(n) != ".identity" {
+		if n == selfId {
 			continue
 		}
 
-		id := n[0 : len(n)-len(".identity")]
-		if id == selfId {
-			continue
-		}
-
-		_, ok := m[id]
-		if !ok || rand.Intn(100) > 95 {
+		identity, ok := m[n]
+		if !ok || identity.Nick == "❓ Incognito..." || rand.Intn(100) > 95 {
 			name := path.Join(p.Name, n)
 			i, err := p.readIdentity(name)
 			if !core.IsErr(err, "cannot read identity from '%s': %v", name) {
@@ -209,7 +205,7 @@ func (p *Pool) syncAccesses(a AccessFile) (requireExport bool, err error) {
 		}
 
 		access, isInDb := amap[accessKey.Access.Id]
-		if isInDb {
+		if !isInDb {
 			switch {
 			case accessKey.Access.ModTime.After(access.ModTime):
 				err = p.sqlSetAccess(accessKey.Access)
@@ -218,8 +214,8 @@ func (p *Pool) syncAccesses(a AccessFile) (requireExport bool, err error) {
 				requireExport = true
 				needNewMasterKey = needNewMasterKey || accessKey.Access.State != access.State && access.State == Disabled
 			}
-			delete(amap, access.Id)
 		}
+		delete(amap, access.Id)
 	}
 
 	requireExport = requireExport || len(amap) > 0

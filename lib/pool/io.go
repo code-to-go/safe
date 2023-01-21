@@ -65,19 +65,19 @@ func (p *Pool) readAccessFile(e transport.Exchanger) (AccessFile, hash.Hash, err
 	}
 
 	if security.VerifySignedHash(sh, []security.Identity{p.Self}, h.Sum(nil)) {
+		p.Trusted = true
 		return a, h, nil
 	}
 
-	if !security.VerifySignedHash(sh, trusted, h.Sum(nil)) {
-		return AccessFile{}, nil, ErrNotTrusted
-	}
-
-	_ = security.AppendToSignedHash(sh, p.Self)
-	if !core.IsErr(err, "cannot lock access on %s: %v", p.Name, err) {
-		if security.AppendToSignedHash(sh, p.Self) == nil {
-			err = transport.WriteJSON(e, signatureFile, sh, nil)
-			core.IsErr(err, "cannot write signature file on %s: %v", p.Name, err)
+	if security.VerifySignedHash(sh, trusted, h.Sum(nil)) {
+		_ = security.AppendToSignedHash(sh, p.Self)
+		if !core.IsErr(err, "cannot lock access on %s: %v", p.Name, err) {
+			if security.AppendToSignedHash(sh, p.Self) == nil {
+				err = transport.WriteJSON(e, signatureFile, sh, nil)
+				core.IsErr(err, "cannot write signature file on %s: %v", p.Name, err)
+			}
 		}
+		p.Trusted = true
 	}
 
 	return a, h, nil

@@ -15,7 +15,7 @@ import (
 )
 
 func pingExchanger(e transport.Exchanger, pool string, data []byte) (time.Duration, error) {
-	start := time.Now()
+	start := core.Now()
 	name := path.Join(pool, fmt.Sprintf(pingName, start.UnixMilli()))
 	err := e.Write(name, bytes.NewBuffer(data))
 	if err != nil {
@@ -30,21 +30,22 @@ func pingExchanger(e transport.Exchanger, pool string, data []byte) (time.Durati
 	e.Delete(name)
 
 	if bytes.Equal(data, buf.Bytes()) {
-		return time.Since(start), nil
+		return core.Since(start), nil
 	} else {
 		return 0, err
 	}
 }
 
-func (p *Pool) createExchangers(configs []transport.Config) {
+func (p *Pool) createExchangers(config Config) {
 	for _, e := range p.exchangers {
 		e.Close()
 	}
 	p.exchangers = nil
 
-	for _, c := range configs {
-		e, err := transport.NewExchanger(c)
-		if core.IsErr(err, "cannot connect to exchange %s: %v", c) {
+	urls := append(config.Public, config.Private...)
+	for _, url := range urls {
+		e, err := transport.NewExchanger(url)
+		if core.IsErr(err, "cannot connect to exchange %s: %v", url) {
 			continue
 		}
 		p.exchangers = append(p.exchangers, e)
@@ -72,8 +73,8 @@ func (p *Pool) findPrimary() {
 	}
 }
 
-func (p *Pool) connectSafe(name string, configs []transport.Config) error {
-	p.createExchangers(configs)
+func (p *Pool) connectSafe(config Config) error {
+	p.createExchangers(config)
 	p.findPrimary()
 	if p.e == nil {
 		logrus.Warnf("no available exchange for domain %s", p.Name)

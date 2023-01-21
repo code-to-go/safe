@@ -2,14 +2,15 @@ package transport
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
 	"time"
 
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/code-to-go/safepool.lib/core"
@@ -33,40 +34,69 @@ type SFTP struct {
 	touch map[string]time.Time
 }
 
-func NewSFTP(config SFTPConfig) (Exchanger, error) {
-	addr := config.Addr
-	if !strings.ContainsRune(addr, ':') {
+func ParseSFTPUrl(s string) (SFTPConfig, error) {
+	u, err := url.Parse(s)
+	if err != nil {
+		return SFTPConfig{}, err
+	}
+
+	password, _ := u.User.Password()
+	return SFTPConfig{
+		Addr:     u.Host,
+		Username: u.User.Username(),
+		Password: password,
+		Base:     u.Path,
+	}, nil
+}
+
+func ToUrl(config SFTPConfig) string {
+	return fmt.Sprintf("sftp://%s@%s/%s", config.Username, config.Addr, config.Base)
+}
+
+// NewSFTP create a new Exchanger. The url is in the format sftp://
+func NewSFTP(connectionUrl string) (Exchanger, error) {
+	u, err := url.Parse(connectionUrl)
+	if err != nil {
+		return nil, err
+	}
+
+	addr := u.Host
+	if u.Port() == "" {
 		addr = fmt.Sprintf("%s:22", addr)
 	}
 
-	var url string
+	params := u.Query()
+
+	var repr string
 	var auth []ssh.AuthMethod
-	if config.Password != "" {
-		auth = append(auth, ssh.Password(config.Password))
-		url = fmt.Sprintf("sftp://%s@%s/%s", config.Username, config.Addr, config.Base)
+
+	password, hasPassword := u.User.Password()
+	if hasPassword {
+		auth = append(auth, ssh.Password(password))
+		repr = fmt.Sprintf("sftp://%s@%s/%s", u.User.Username(), addr, u.Path)
 	}
-	if config.KeyPath != "" {
-		key, err := os.ReadFile(config.KeyPath)
-		if err != nil {
-			return nil, fmt.Errorf("cannot load key file %s: %v", config.KeyPath, err)
+
+	if key := params.Get("key"); key != "" {
+		pkey, err := base64.StdEncoding.DecodeString(key)
+		if core.IsErr(err, "private key is invalid: %v") {
+			return nil, err
 		}
 
-		signer, err := ssh.ParsePrivateKey(key)
+		signer, err := ssh.ParsePrivateKey(pkey)
 		if err != nil {
-			return nil, fmt.Errorf("invalid key file %s: %v", config.KeyPath, err)
+			return nil, fmt.Errorf("invalid key: %v", err)
 		}
 		auth = append(auth, ssh.PublicKeys(signer))
-		url = fmt.Sprintf("sftp://!%s@%s/%s", filepath.Base(config.KeyPath), config.Addr, config.Base)
+		repr = fmt.Sprintf("sftp://PKEY@%s/%s", addr, u.Path)
 	}
+
 	if len(auth) == 0 {
-		return nil, fmt.Errorf("no auth method provided for sftp connection to %s", config.Addr)
+		return nil, fmt.Errorf("no auth method provided for sftp connection to %s", addr)
 	}
 
 	cc := &ssh.ClientConfig{
-		User: config.Username,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(config.Password),
-		},
+		User:            u.User.Username(),
+		Auth:            auth,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
@@ -79,11 +109,11 @@ func NewSFTP(config SFTPConfig) (Exchanger, error) {
 		return nil, fmt.Errorf("cannot create a sftp client for %s: %v", addr, err)
 	}
 
-	base := config.Base
+	base := u.Path
 	if base == "" {
 		base = "/"
 	}
-	return &SFTP{c, base, url, map[string]time.Time{}}, nil
+	return &SFTP{c, base, repr, map[string]time.Time{}}, nil
 }
 
 func (s *SFTP) Touched(name string) bool {
@@ -94,7 +124,7 @@ func (s *SFTP) Touched(name string) bool {
 	}
 	if stat.ModTime().After(s.touch[name]) {
 		if !core.IsErr(s.Write(touchFile, &bytes.Buffer{}), "cannot write touch file: %v") {
-			s.touch[name] = time.Now()
+			s.touch[name] = core.Now()
 		}
 		return true
 	}

@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/adrg/xdg"
 	"github.com/code-to-go/safepool.lib/api/library"
 	"github.com/code-to-go/safepool.lib/core"
 	"github.com/code-to-go/safepool.lib/pool"
@@ -60,7 +62,7 @@ func addDocument(l library.Library) {
 			Default: name,
 		}
 		name, _ = prompt.Run()
-		h, err := l.Send(localPath, name)
+		h, err := l.Send(localPath, name, true)
 		if core.IsErr(err, "cannot upload %s: %v", localPath) {
 			color.Red("cannot upload %s", localPath)
 		} else {
@@ -83,44 +85,51 @@ const (
 )
 
 type action struct {
-	typ      actionType
-	document library.Document
+	typ     actionType
+	version *library.Version
 }
 
-func actionsOnDocument(l library.Library, ds []library.Document) {
+func askPath(suggested string) string {
+	prompt := promptui.Prompt{
+		Label:   "Edit Destination",
+		Default: suggested,
+	}
+	name, _ := prompt.Run()
+	return name
+}
+
+func actionsOnDocument(l library.Library, d library.Document) {
 	items := []string{"🔙 Back"}
 	var actions []action
 
-	for _, d := range ds {
-		if d.LocalPath != "" {
-			if d.Mode == library.Newer {
-				items = append(items, "send update to the pool")
-				actions = append(actions, action{uploadLocal, d})
-			}
-			items = append(items, "open locally")
-			actions = append(actions, action{openLocally, d})
-			items = append(items, "open local folder")
-			actions = append(actions, action{openFolder, d})
-			items = append(items, "delete")
-			actions = append(actions, action{deletelocal, d})
-		} else {
-			i, _ := security.IdentityFromId(d.AuthorId)
-			switch d.Mode {
-			case library.Newer:
-				items = append(items, fmt.Sprintf("receice update from %s", i.Nick))
-				actions = append(actions, action{updateLocal, d})
-			case library.Conflict:
-				items = append(items, fmt.Sprintf("receive replacement from %s", i.Nick))
-				actions = append(actions, action{updateLocal, d})
-			}
-			if d.Mode != library.Deleted {
-				items = append(items, fmt.Sprintf("download from %s to a temporary location", i.Nick))
-			}
-			actions = append(actions, action{downloadTemp, d})
+	if d.LocalPath != "" {
+		items = append(items, "open locally")
+		actions = append(actions, action{openLocally, nil})
+		items = append(items, "open local folder")
+		actions = append(actions, action{openFolder, nil})
+		items = append(items, "delete")
+		actions = append(actions, action{deletelocal, nil})
+		if d.State == library.Modified || d.State == library.Conflict {
+			items = append(items, "send update to the pool")
+			actions = append(actions, action{uploadLocal, nil})
 		}
 	}
 
-	label := fmt.Sprintf("Choose the action on '%s'", ds[0].Name)
+	for _, v := range d.Versions {
+		i, _ := security.IdentityFromId(v.AuthorId)
+		switch {
+		case v.State == library.Updated:
+			items = append(items, fmt.Sprintf("receive update from %s: size %d, date %s", i.Nick, v.Size, v.ModTime.Format(time.Stamp)))
+			actions = append(actions, action{updateLocal, &v})
+		case v.State == library.Conflict:
+			items = append(items, fmt.Sprintf("receive replacement from %s: size %d, date %s", i.Nick, v.Size, v.ModTime.Format(time.Stamp)))
+			actions = append(actions, action{updateLocal, &v})
+		}
+		items = append(items, fmt.Sprintf("download from %s: size %d, date %s", i.Nick, v.Size, v.ModTime.Format(time.Stamp)))
+		actions = append(actions, action{downloadTemp, &v})
+	}
+
+	label := fmt.Sprintf("Choose the action on '%s'", d.Name)
 	prompt := promptui.Select{
 		Label: label,
 		Items: items,
@@ -132,36 +141,51 @@ func actionsOnDocument(l library.Library, ds []library.Document) {
 	a := actions[idx-1]
 	switch a.typ {
 	case openLocally:
-		open.Start(a.document.LocalPath)
+		open.Start(d.LocalPath)
 	case openFolder:
-		open.Start(filepath.Dir(a.document.LocalPath))
+		open.Start(filepath.Dir(d.LocalPath))
 	case deletelocal:
-
+		os.Remove(d.LocalPath)
 	case uploadLocal:
-		l.Send(a.document.LocalPath, a.document.Name)
+		l.Send(d.LocalPath, d.Name, true)
 	case updateLocal:
-		localPath, _ := l.GetLocalPath(a.document.Name)
-		l.Receive(a.document.Id, localPath)
+		localPath := d.LocalPath
+		if localPath == "" {
+			localPath = askPath(filepath.Join(xdg.UserDirs.Documents, l.Pool.Name, d.Name))
+		}
+		_, err := l.Receive(a.version.Id, localPath)
+		if err == nil {
+			color.Green("File updated to %s", localPath)
+		} else {
+			color.Red("Cannot update to %s: %v", localPath, err)
+		}
 	case downloadTemp:
-		dest := filepath.Join(os.TempDir(), a.document.Name)
-		l.Save(a.document.Id, dest)
+		dest := askPath(filepath.Join(os.TempDir(), d.Name))
+		err := l.Save(a.version.Id, dest)
+		if err == nil {
+			color.Green("File downloaded to %s", dest)
+		} else {
+			color.Red("Cannot download to %s: %v", dest, err)
+		}
 	}
 
 }
 
-func documentString(d library.Document) string {
-	var mode, author string
-	switch d.Mode {
-	case library.Same:
-		mode = "✓"
-	case library.Newer:
-		mode = "👶"
-	case library.Older:
-		mode = "👴"
+func documentFormat(d library.Document) string {
+	var icon, author string
+	switch d.State {
+	case library.Sync:
+		icon = "✓"
+	case library.New:
+		icon = "⇐"
+	case library.Updated:
+		icon = "←"
+	case library.Modified:
+		icon = "→"
 	case library.Conflict:
-		mode = "💣"
+		icon = "⇆"
 	case library.Deleted:
-		mode = "🗑"
+		icon = "🗑"
 	}
 
 	if identity, ok, _ := security.GetIdentity(d.AuthorId); ok {
@@ -169,42 +193,27 @@ func documentString(d library.Document) string {
 	} else {
 		author = d.AuthorId
 	}
-	return fmt.Sprintf("%s %s ←%s 🔗%s", mode, d.Name, author, d.LocalPath)
+	return fmt.Sprintf("%s %s 👤%s 🔗%s", icon, d.Name, author, d.LocalPath)
 }
 
 func Library(p *pool.Pool) {
 	p.Sync()
 	l := library.Get(p, "library")
 
+	folder := ""
 	for {
-		documents, err := l.List("")
+		ls, err := l.List(folder)
 		if core.IsErr(err, "cannot read document list: %v") {
 			color.Red("something wrong")
 			return
 		}
 
-		m := map[string][]library.Document{}
-		for _, d := range documents {
-			if d.LocalPath != "" {
-				m[d.Name] = append([]library.Document{d}, m[d.Name]...)
-			} else if _, ok := m[d.Name]; !ok {
-				m[d.Name] = append(m[d.Name], d)
-			}
-		}
-
-		var d2 [][]library.Document
-		for _, ds := range m {
-			d2 = append(d2, ds)
-		}
-
 		items := []string{"🔙 Back", "⟳ Refresh", "＋ Add"}
-		for _, ds := range d2 {
-			d := ds[0]
-			if d.Mode == library.Folder {
-				items = append(items, fmt.Sprintf("📁 %s", d.Name))
-			} else {
-				items = append(items, documentString(d))
-			}
+		for _, d := range ls.Documents {
+			items = append(items, documentFormat(d))
+		}
+		for _, s := range ls.Subfolders {
+			items = append(items, fmt.Sprintf("📁 %s", s))
 		}
 
 		prompt := promptui.Select{
@@ -218,13 +227,22 @@ func Library(p *pool.Pool) {
 		}
 		switch idx {
 		case 0:
-			return
+			if folder == "" {
+				return
+			} else {
+				folder = path.Dir(folder)
+				folder = strings.TrimLeft(folder, ".")
+			}
 		case 1:
 			p.Sync()
 		case 2:
 			addDocument(l)
 		default:
-			actionsOnDocument(l, d2[idx-3])
+			if idx < len(ls.Documents)+3 {
+				actionsOnDocument(l, ls.Documents[idx-3])
+			} else {
+				folder = ls.Subfolders[idx-2-len(ls.Documents)]
+			}
 		}
 	}
 }

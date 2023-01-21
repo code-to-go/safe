@@ -30,7 +30,7 @@ func TestDb(t *testing.T) {
 	// assert.NoErrorf(t, err, "cannot list domains: %v", err)
 	// assert.Contains(t, domains, "public.safepool.zone", "cannot find expected domain")
 
-	// now := time.Unix(time.Now().Unix(), 0)
+	// now := time.Unix(core.Now().Unix(), 0)
 	// err = SetFile(model.File{
 	// 	Domain:  "public.safepool.zone",
 	// 	Name:    "test.txt",

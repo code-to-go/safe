@@ -16,10 +16,7 @@ func testCreateFile(t *testing.T, s Exchanger) {
 }
 
 func TestCreateFile(t *testing.T) {
-	c, err := ReadConfig("../../credentials/s3-2.yaml")
-	assert.NoErrorf(t, err, "Cannot load SFTP config: %v", err)
-
-	fs, err := NewExchanger(c)
+	fs, err := NewExchanger("sftp://sftp_user:11H^m63W5vAL@localhost/sftp_user")
 	assert.NoErrorf(t, err, "Cannot load SFTP config: %v", err)
 	testCreateFile(t, fs)
 

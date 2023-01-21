@@ -29,7 +29,7 @@ func Start() {
 		Self, err = security.IdentityFromBase64(s)
 	} else {
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		name := fmt.Sprintf("%s #%d", names[r.Intn(len(names))], r.Intn(100))
+		name := fmt.Sprintf("%s%d", names[r.Intn(len(names))], r.Intn(100))
 		Self, err = security.NewIdentity(name)
 		if err == nil {
 			s, err = Self.Base64()

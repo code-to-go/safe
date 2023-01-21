@@ -9,7 +9,7 @@ import (
 	"github.com/manifoldco/promptui"
 )
 
-func AddBather(p *pool.Pool) {
+func AddUser(p *pool.Pool) {
 
 	propmt := promptui.Prompt{
 		Label: "Enter id (or empty for global token)",
@@ -47,13 +47,13 @@ func AddBather(p *pool.Pool) {
 	}
 }
 
-func Bathers(p *pool.Pool) {
+func Users(p *pool.Pool) {
 
 	for {
 
 		identities, err := p.Identities()
 		if core.IsErr(err, "cannot read identities from db: %v") {
-			color.Red("cannot list bathers")
+			color.Red("cannot list users")
 			return
 		}
 
@@ -70,7 +70,7 @@ func Bathers(p *pool.Pool) {
 		idx, _, _ := prompt.Run()
 		switch idx {
 		case 0:
-			AddBather(p)
+			AddUser(p)
 		case 1:
 			return
 		default:

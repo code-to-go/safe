@@ -62,7 +62,7 @@ func Chat(p *pool.Pool) {
 		case len(t) == 0 && lastInput == "":
 			return
 		case len(t) == 0:
-			lastInput = t
+			color.Green("Enter again to exit")
 		case strings.HasPrefix(t, "\\?"):
 			printChatHelp()
 		case strings.HasPrefix(t, "\\"):
@@ -73,5 +73,6 @@ func Chat(p *pool.Pool) {
 				color.Red("cannot send message: %s")
 			}
 		}
+		lastInput = t
 	}
 }

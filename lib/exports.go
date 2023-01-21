@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 
 	pool "github.com/code-to-go/safepool.lib/pool"
-	"github.com/code-to-go/safepool.lib/transport"
 )
 
 //export start
@@ -43,13 +42,13 @@ func saveSafe(nameC *C.char, configsC *C.char) *C.char {
 	name := C.GoString(nameC)
 	configsS := C.GoString(configsC)
 
-	var configs []transport.Config
-	err := json.Unmarshal([]byte(configsS), &configs)
+	var c pool.Config
+	err := json.Unmarshal([]byte(configsS), &c)
 	if err != nil {
 		return C.CString(err.Error())
 	}
 
-	if err = pool.Save(name, configs); err != nil {
+	if err = pool.Save(name, c); err != nil {
 		return C.CString(err.Error())
 	}
 	return nil

@@ -79,6 +79,9 @@ SELECT id, name, modTime, size, authorId, hash, offset, meta FROM heads WHERE po
 -- SET_HEAD
 INSERT INTO heads(pool,id,name,modTime,size,authorId,hash,meta) VALUES(:pool,:id,:name,:modTime,:size,:authorId,:hash,:meta)
 
+-- DEL_HEAD_BEFORE
+DELETE FROM heads WHERE pool=:pool AND id <:beforeId
+
 -- INIT
 CREATE TABLE IF NOT EXISTS keys (
     pool VARCHAR(128) NOT NULL, 
@@ -165,56 +168,76 @@ SELECT message FROM chats WHERE pool=:pool AND id > :afterId AND id < :beforeId 
 SELECT max(offset) FROM chats WHERE pool=:pool
 
 -- INIT
-CREATE TABLE IF NOT EXISTS documents (
+CREATE TABLE IF NOT EXISTS library_files (
     pool VARCHAR(128) NOT NULL,
     base VARCHAR(128) NOT NULL,
     id INTEGER NOT NULL,
     name VARCHAR(4096) NOT NULL,
     authorId VARCHAR(128) NOT NULL,
-    mode INTEGER NOT NULL,
     modTime INTEGER,
     size INTEGER NOT NULL,
     contentType VARCHAR(128) NOT NULL,
     hash VARCHAR(128) NOT NULL,
     hashChain BLOB,
-    localModTime INTEGER,
-    localPath VARCHAR(4096) NOT NULL,
     offset INTEGER NOT NULL,
     folder VARCHAR(4096) NOT NULL,
     level INTEGER NOT NULL,
-    CONSTRAINT pk_pool_base_id PRIMARY KEY(pool,base,name,authorId,localPath)
+    CONSTRAINT pk_pool_base_id PRIMARY KEY(pool,base,name,authorId)
 );
 
--- INIT
-CREATE INDEX IF NOT EXISTS idx_documents_name ON heads(name);
+-- SET_LIBRARY_FILE
+INSERT INTO library_files(pool,base,id,name,authorId,modTime,size,contentType,hash,hashChain,offset,folder,level) 
+    VALUES(:pool,:base,:id,:name,:authorId,:modTime,:size,:contentType,:hash,:hashChain,:offset,:folder,:level)
+    ON CONFLICT(pool,base,name,authorId) DO UPDATE SET id=:id,modTime=:modTime,size=:size,
+    contentType=:contentType,hash=:hash, hashChain=:hashChain,offset=:offset
+	    WHERE pool=:pool AND base=:base AND name=:name AND authorId=:authorId
 
--- SET_DOCUMENT
-INSERT INTO documents(pool,base,id,name,authorId,mode,modTime,size,contentType,hash,hashChain,localModTime,localPath,offset,folder,level) 
-    VALUES(:pool,:base,:id,:name,:authorId,:mode,:modTime,:size,:contentType,:hash,:hashChain,:localModTime,:localPath,:offset,:folder,:level)
-    ON CONFLICT(pool,base,name,authorId,localPath) DO UPDATE SET id=:id,mode=:mode,modTime=:modTime,size=:size,
-    contentType=:contentType,hash=:hash, hashChain=:hashChain,localModTime=:localModTime,localPath=:localPath,offset=:offset
-	    WHERE pool=:pool AND base=:base AND name=:name AND authorId=:authorId AND localPath=:localPath
-
--- CLEAN_DOCUMENT_LOCAL
-UPDATE documents SET localPath='' WHERE pool=:pool AND base=:base AND name=:name AND id!=:id;
-
--- SET_DOCUMENT_MODE
-UPDATE documents SET mode=:mode WHERE pool=:pool AND base=:base AND id=:id;
-
--- GET_DOCUMENT
-SELECT name,authorId,mode,modTime,id,size,contentType,hash,hashChain,localModTime,localPath,offset FROM documents 
-    WHERE pool=:pool AND base=:base AND id=:id
-
--- GET_DOCUMENT_LOCAL
-SELECT name,authorId,mode,modTime,id,size,contentType,hash,hashChain,localModTime,localPath,offset FROM documents 
-    WHERE pool=:pool AND base=:base AND name=:name AND localPath != ""
-
--- GET_DOCUMENTS_IN_FOLDER
-SELECT name,authorId,mode,modTime,id,size,contentType,hash,hashChain,localModTime,localPath,offset FROM documents 
+-- GET_LIBRARY_FILES_IN_FOLDER
+SELECT name,authorId,modTime,id,size,contentType,hash,hashChain,offset FROM library_files 
     WHERE pool=:pool AND base=:base AND folder=:folder ORDER BY name
 
--- GET_DOCUMENTS_SUBFOLDERS
-SELECT folder FROM documents WHERE pool=:pool AND base=:base AND folder LIKE :folder AND level=:level ORDER BY folder
+-- GET_LIBRARY_FILE_BY_ID
+SELECT name,authorId,modTime,id,size,contentType,hash,hashChain,offset FROM library_files 
+    WHERE pool=:pool AND base=:base AND id=:id
 
--- GET_DOCUMENTS_OFFSET
-SELECT max(offset) FROM documents WHERE pool=:pool AND base=:base 
+-- GET_LIBRARY_FILE_BY_NAME
+SELECT name,authorId,modTime,id,size,contentType,hash,hashChain,offset FROM library_files 
+    WHERE pool=:pool AND base=:base AND name=:name AND authorId=:authorId
+
+-- GET_LIBRARY_FILES_SUBFOLDERS
+SELECT folder FROM library_files WHERE pool=:pool AND base=:base AND folder LIKE :folder AND level=:level ORDER BY folder
+
+-- GET_LIBRARY_FILES_HASHES
+SELECT hash FROM library_files WHERE pool=:pool AND base=:base AND name=:name ORDER BY modTime DESC LIMIT :limit
+
+-- GET_LIBRARY_FILES_OFFSET
+SELECT max(offset) FROM library_files WHERE pool=:pool AND base=:base 
+
+-- INIT
+CREATE TABLE IF NOT EXISTS library_locals (
+    pool VARCHAR(128) NOT NULL,
+    base VARCHAR(128) NOT NULL,
+    folder VARCHAR(4096) NOT NULL,
+    name VARCHAR(4096) NOT NULL,
+    path VARCHAR(4096) NOT NULL,
+    id INTEGER NOT NULL,
+    authorId VARCHAR(128) NOT NULL,
+    modTime INTEGER,
+    size INTEGER NOT NULL,
+    hash VARCHAR(128) NOT NULL,
+    hashChain BLOB,
+    CONSTRAINT pk_pool_base_name PRIMARY KEY(pool,base,name)
+);
+
+-- SET_LIBRARY_LOCAL
+INSERT INTO library_locals(pool,base,folder,name,path,id,authorId,modTime,size,hash,hashChain)
+    VALUES(:pool,:base,:folder,:name,:path,:id,:authorId,:modTime,:size,:hash,:hashChain)
+    ON CONFLICT(pool,base,name) DO UPDATE SET id=:id,modTime=:modTime,authorId=:authorId,size=:size,path=:path,
+        hash=:hash,hashChain=:hashChain
+	    WHERE pool=:pool AND base=:base AND name=:name
+
+-- GET_LIBRARY_LOCALS_IN_FOLDER
+SELECT name,path,id,authorId,modTime,size,hash,hashChain FROM library_locals WHERE pool=:pool AND base=:base AND folder=:folder
+
+-- GET_LIBRARY_LOCAL
+SELECT name,path,id,authorId,modTime,size,hash,hashChain FROM library_locals WHERE pool=:pool AND base=:base AND name=:name

@@ -2,12 +2,10 @@ package pool
 
 import (
 	"encoding/json"
-	"time"
 
 	"github.com/code-to-go/safepool.lib/core"
 	"github.com/code-to-go/safepool.lib/security"
 	"github.com/code-to-go/safepool.lib/sql"
-	"github.com/code-to-go/safepool.lib/transport"
 )
 
 func sqlGetHeads(pool string, offset int) ([]Head, error) {
@@ -25,6 +23,7 @@ func sqlGetHeads(pool string, offset int) ([]Head, error) {
 		var meta string
 		err = rows.Scan(&h.Id, &h.Name, &modTime, &h.Size, &h.AuthorId, &hash, &h.Offset, &meta)
 		if !core.IsErr(err, "cannot read pool heads from db: %v") {
+			h.Hash = sql.DecodeBase64(hash)
 			h.ModTime = sql.DecodeTime(modTime)
 			h.Meta = sql.DecodeBase64(meta)
 			heads = append(heads, h)
@@ -44,9 +43,15 @@ func sqlGetHead(pool string, id uint64) (Head, error) {
 		return Head{}, err
 	}
 
+	h.Hash = sql.DecodeBase64(hash)
 	h.ModTime = sql.DecodeTime(modTime)
 	h.Meta = sql.DecodeBase64(meta)
 	return h, nil
+}
+
+func sqlDelHeadBefore(pool string, id uint64) error {
+	_, err := sql.Exec("DEL_HEAD_BEFORE", sql.Args{"pool": pool, "beforeId": id})
+	return err
 }
 
 func sqlAddHead(pool string, h Head) error {
@@ -150,13 +155,13 @@ func (p *Pool) sqlSetAccess(a Access) error {
 		"pool":    p.Name,
 		"modTime": sql.EncodeTime(a.ModTime),
 		"state":   a.State,
-		"ts":      sql.EncodeTime(time.Now()),
+		"ts":      sql.EncodeTime(core.Now()),
 	})
 	return err
 }
 
-func sqlSave(name string, configs []transport.Config) error {
-	data, err := json.Marshal(&configs)
+func sqlSave(name string, c Config) error {
+	data, err := json.Marshal(&c)
 	if core.IsErr(err, "cannot marshal transport configuration of %s: %v", name) {
 		return err
 	}
@@ -166,18 +171,18 @@ func sqlSave(name string, configs []transport.Config) error {
 	return err
 }
 
-func sqlLoad(name string) ([]transport.Config, error) {
+func sqlLoad(name string) (Config, error) {
 	var blob string
-	var configs []transport.Config
+	var c Config
 	err := sql.QueryRow("GET_POOL", sql.Args{"name": name}, &blob)
 	if core.IsErr(err, "cannot get pool %s config: %v", name) {
-		return nil, err
+		return Config{}, err
 	}
 
 	data := sql.DecodeBase64(blob)
-	err = json.Unmarshal(data, &configs)
+	err = json.Unmarshal(data, &c)
 	core.IsErr(err, "cannot unmarshal configs of %s: %v", name)
-	return configs, err
+	return c, err
 }
 
 func sqlList() ([]string, error) {

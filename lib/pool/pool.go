@@ -7,8 +7,7 @@ import (
 	"fmt"
 	"io"
 	"path"
-	"strconv"
-	"strings"
+	"sync"
 	"time"
 
 	"github.com/code-to-go/safepool.lib/core"
@@ -38,13 +37,18 @@ type Pool struct {
 	Name      string
 	Self      security.Identity
 	Consumers []Consumer
+	Trusted   bool
 
-	e           transport.Exchanger
-	exchangers  []transport.Exchanger
-	masterKeyId uint64
-	masterKey   []byte
-	lastReplica time.Time
-	accessHash  []byte
+	e                transport.Exchanger
+	exchangers       []transport.Exchanger
+	masterKeyId      uint64
+	masterKey        []byte
+	lastReplica      time.Time
+	accessHash       []byte
+	config           Config
+	houseKeeping     *time.Ticker
+	houseKeepingLock sync.Mutex
+	stopHouseKeeping chan bool
 }
 
 type Identity struct {
@@ -78,7 +82,8 @@ var CacheSizeMB = 16
 
 type Config struct {
 	Name    string
-	Configs []transport.Config
+	Public  []string
+	Private []string
 }
 
 func List() []string {
@@ -87,7 +92,7 @@ func List() []string {
 }
 
 func Create(self security.Identity, name string) (*Pool, error) {
-	configs, err := sqlLoad(name)
+	config, err := sqlLoad(name)
 	if core.IsErr(err, "unknown pool %s: %v", name) {
 		return nil, err
 	}
@@ -95,9 +100,10 @@ func Create(self security.Identity, name string) (*Pool, error) {
 	p := &Pool{
 		Name:        name,
 		Self:        self,
-		lastReplica: time.Now(),
+		lastReplica: core.Now(),
+		config:      config,
 	}
-	err = p.connectSafe(name, configs)
+	err = p.connectSafe(config)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +118,7 @@ func Create(self security.Identity, name string) (*Pool, error) {
 	access := Access{
 		Id:      self.Id(),
 		State:   Active,
-		ModTime: time.Now(),
+		ModTime: core.Now(),
 	}
 	err = p.sqlSetAccess(access)
 	if core.IsErr(err, "cannot link identity to pool '%s': %v", p.Name) {
@@ -141,7 +147,7 @@ func Create(self security.Identity, name string) (*Pool, error) {
 
 // Init initialized a domain on the specified exchangers
 func Open(self security.Identity, name string) (*Pool, error) {
-	configs, err := sqlLoad(name)
+	config, err := sqlLoad(name)
 	if core.IsErr(err, "unknown pool %s: %v", name) {
 		return nil, err
 	}
@@ -149,7 +155,7 @@ func Open(self security.Identity, name string) (*Pool, error) {
 		Name: name,
 		Self: self,
 	}
-	err = p.connectSafe(name, configs)
+	err = p.connectSafe(config)
 	if err != nil {
 		return nil, err
 	}
@@ -160,6 +166,8 @@ func Open(self security.Identity, name string) (*Pool, error) {
 	}
 
 	_, err = p.sync(p.e)
+
+	p.startHouseKeeping()
 	return p, err
 }
 
@@ -177,7 +185,7 @@ func (p *Pool) List(offset int) ([]Head, error) {
 
 func (p *Pool) Send(name string, r io.Reader, meta []byte) (Head, error) {
 	id := snowflake.ID()
-	n := path.Join(p.Name, fmt.Sprintf("%d.body", id))
+	n := path.Join(p.Name, FeedsFolder, fmt.Sprintf("%d.body", id))
 	hr, err := p.writeFile(n, r)
 	if core.IsErr(err, "cannot post file %s to %s: %v", name, p.e) {
 		return Head{}, err
@@ -193,7 +201,7 @@ func (p *Pool) Send(name string, r io.Reader, meta []byte) (Head, error) {
 		Name:      name,
 		Size:      hr.Size(),
 		Hash:      hash,
-		ModTime:   time.Now(),
+		ModTime:   core.Now(),
 		AuthorId:  p.Self.Id(),
 		Signature: signature,
 		Meta:      meta,
@@ -203,7 +211,7 @@ func (p *Pool) Send(name string, r io.Reader, meta []byte) (Head, error) {
 		return Head{}, err
 	}
 
-	n = path.Join(p.Name, fmt.Sprintf("%d.head", id))
+	n = path.Join(p.Name, FeedsFolder, fmt.Sprintf("%d.head", id))
 	_, err = p.writeFile(n, bytes.NewBuffer(data))
 	core.IsErr(err, "cannot write header %s.head in %s: %v", name, p.e)
 
@@ -213,14 +221,14 @@ func (p *Pool) Send(name string, r io.Reader, meta []byte) (Head, error) {
 func (p *Pool) Receive(id uint64, rang *transport.Range, w io.Writer) error {
 	h, err := sqlGetHead(p.Name, id)
 	if err != nil {
-		headName := path.Join(p.Name, fmt.Sprintf("%d.head", id))
+		headName := path.Join(p.Name, FeedsFolder, fmt.Sprintf("%d.head", id))
 		h, err = p.readHead(headName)
 		if core.IsErr(err, "cannot read header '%s': %v") {
 			return err
 		}
 	}
 
-	bodyName := path.Join(p.Name, fmt.Sprintf("%d.body", id))
+	bodyName := path.Join(p.Name, FeedsFolder, fmt.Sprintf("%d.body", id))
 	cached, err := p.getFromCache(bodyName, rang, w)
 	if cached {
 		return err
@@ -243,51 +251,36 @@ func (p *Pool) Receive(id uint64, rang *transport.Range, w io.Writer) error {
 	return nil
 }
 
-func (p *Pool) Sync() error {
-	if !p.e.Touched(p.Name + "/") {
-		return nil
-	}
-	hs, _ := p.List(0)
-
-	heads := map[uint64]Head{}
-	for _, h := range hs {
-		heads[h.Id] = h
+func (p *Pool) Fork(name string, ids []string) (Config, error) {
+	c := Config{
+		Name:    name,
+		Public:  p.config.Public,
+		Private: p.config.Private,
 	}
 
-	fs, err := p.e.ReadDir(p.Name, 0)
-	if core.IsErr(err, "cannot read content in pool %s/%s", p.e, p.Name) {
-		return err
-	}
-	for _, f := range fs {
-		name := f.Name()
-		if !strings.HasSuffix(name, ".head") {
-			continue
-		}
-
-		id, err := strconv.ParseInt(name[0:len(name)-len(".head")], 10, 64)
-		if err != nil {
-			continue
-		}
-		if _, found := heads[uint64(id)]; found {
-			continue
-		}
-
-		h, err := p.readHead(path.Join(p.Name, name))
-		if core.IsErr(err, "cannot read file %s from %s: %v", name, p.e) {
-			continue
-		}
-		_ = sqlAddHead(p.Name, h)
-		hs = append(hs, h)
+	err := Define(c)
+	if core.IsErr(err, "cannot define Forked pool %s: %v", name) {
+		return Config{}, err
 	}
 
-	if time.Until(p.lastReplica) > ReplicaPeriod {
-		p.replica()
-		p.lastReplica = time.Now()
+	p2, err := Create(p.Self, name)
+	if core.IsErr(err, "cannot create Forked pool %s: %v", name) {
+		return Config{}, err
 	}
-	return nil
+	defer p2.Close()
+
+	for _, id := range ids {
+		p2.SetAccess(id, Active)
+	}
+
+	return c, nil
 }
 
 func (p *Pool) Close() {
+	p.stopHouseKeeping <- true
+	p.houseKeepingLock.Lock()
+	defer p.houseKeepingLock.Unlock()
+
 	for _, e := range p.exchangers {
 		_ = e.Close()
 	}
@@ -325,7 +318,7 @@ func (p *Pool) SetAccess(userId string, state State) error {
 	err := p.sqlSetAccess(Access{
 		Id:      userId,
 		State:   state,
-		ModTime: time.Now(),
+		ModTime: core.Now(),
 	})
 	if core.IsErr(err, "cannot link identity '%s' to pool '%s': %v", userId, p.Name) {
 		return err

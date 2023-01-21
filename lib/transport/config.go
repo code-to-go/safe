@@ -1,9 +1,7 @@
 package transport
 
 import (
-	"os"
-
-	"gopkg.in/yaml.v3"
+	"strings"
 )
 
 type Config struct {
@@ -12,29 +10,40 @@ type Config struct {
 	Local *LocalConfig `json:"local,omitempty" yaml:"local,omitempty"`
 }
 
-func ReadConfig(name string) (Config, error) {
+func ParseUrls(urls []string) (Config, error) {
 	var c Config
-	data, err := os.ReadFile(name)
-	if err != nil {
-		return c, err
+	for _, url := range urls {
+		switch {
+		case strings.HasPrefix(url, "sftp://"):
+			if s, err := ParseSFTPUrl(url); err == nil {
+				c.SFTP = &s
+			} else {
+				return Config{}, err
+			}
+		case strings.HasPrefix(url, "s3://"):
+			if s, err := ParseS3Url(url); err == nil {
+				c.S3 = &s
+			} else {
+				return Config{}, err
+			}
+		}
+
 	}
-	err = yaml.Unmarshal(data, &c)
-	return c, err
+	return c, nil
 }
 
-var SampleConfig = Config{
-	SFTP: &SFTPConfig{
-		Addr:     "hostname",
-		Username: "username",
-		Password: "password when not using private key authentication",
-		KeyPath:  "path when using private key authentication",
-		Base:     "local path on the sftp server",
-	},
-	S3: &S3Config{
-		Region:    "AWS region, i.e. eu-central-1",
-		Endpoint:  "S3 endpoint, i.e. s3.eu-central-1.amazonaws.com",
-		Bucket:    "S3 bucket name",
-		AccessKey: "S3 access key",
-		Secret:    "S3 secret key",
-	},
+// func ReadConfig(name string) (Config, error) {
+// 	var c Config
+// 	data, err := os.ReadFile(name)
+// 	if err != nil {
+// 		return c, err
+// 	}
+// 	err = yaml.Unmarshal(data, &c)
+// 	return c, err
+// }
+
+var SampleConfig = []string{
+	"sftp://username:password@hostname?key=key",
+	"s3://accessKey:secret@s3.eu-central-1.amazonaws.com/bucket",
+	"file://path",
 }

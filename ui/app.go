@@ -61,8 +61,8 @@ func (a *App) GetPoolList() []string {
 
 func (a *App) GetConfigTemplate() (string, error) {
 	c := pool.Config{
-		Name:    "pool name",
-		Configs: []transport.Config{transport.SampleConfig},
+		Name:   "pool name",
+		Public: transport.SampleConfig,
 	}
 
 	data, err := yaml.Marshal(c)
@@ -76,10 +76,10 @@ func (a *App) CreatePool(config string) (string, error) {
 		return "", err
 	}
 
-	if len(c.Configs) == 0 || c.Name == "" {
+	if (len(c.Public)+len(c.Private)) == 0 || c.Name == "" {
 		return "", pool.ErrInvalidConfig
 	} else {
-		core.Info("valid config for pool '%s' with %d exchanges", c.Name, len(c.Configs))
+		core.Info("valid config for pool '%s'", c.Name)
 	}
 	err = pool.Define(c)
 	if core.IsErr(err, "cannot define pool '%s': %v", c.Name) {
@@ -113,11 +113,11 @@ func (a *App) AddPool(token string) error {
 		return err
 	}
 
-	if c.Name == "" || len(c.Configs) == 0 {
+	if c.Name == "" || (len(c.Public)+len(c.Private)) == 0 {
 		core.IsErr(pool.ErrInvalidToken, "invalid config '%s': %v", string(bs))
 		return pool.ErrInvalidToken
 	} else {
-		core.Info("valid token for pool '%s' with %d exchanges", c.Name, len(c.Configs))
+		core.Info("valid token for pool '%s'", c.Name)
 	}
 
 	err = pool.Define(c)
@@ -184,16 +184,16 @@ func (a *App) GetToken(poolName string, guestId string) (string, error) {
 	return "", fmt.Errorf("invalid pool '%s'", poolName)
 }
 
-func (a *App) ListLibrary(poolName string) []library.Document {
-	return []library.Document{
+func (a *App) ListLibrary(poolName string) []library.File {
+	return []library.File{
 		{
 			Id:          1,
 			Name:        "test.doc",
 			Size:        192922,
 			AuthorId:    api.Self.Id(),
 			ContentType: "application/word",
-			LocalPath:   "~/Documents/pools/safepool.ch/test.doc",
-			Mode:        library.Same,
+			// LocalPath:   "~/Documents/pools/safepool.ch/test.doc",
+			// Mode:        library.Sync,
 		},
 		{
 			Id:          1,
@@ -201,8 +201,8 @@ func (a *App) ListLibrary(poolName string) []library.Document {
 			Size:        192922,
 			AuthorId:    api.Self.Id(),
 			ContentType: "application/word",
-			LocalPath:   "~/Documents/pools/safepool.ch/test.doc",
-			Mode:        library.Same,
+			// LocalPath:   "~/Documents/pools/safepool.ch/test.doc",
+			// Mode:        library.Sync,
 		},
 	}
 }

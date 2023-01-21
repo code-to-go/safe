@@ -5,53 +5,84 @@ import (
 	"encoding/json"
 	"os"
 	"path"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/code-to-go/safepool.lib/core"
 	pool "github.com/code-to-go/safepool.lib/pool"
+	"github.com/code-to-go/safepool.lib/security"
 	"github.com/wailsapp/mimetype"
 )
 
-type State int
-
-var HashChainMaxLength = 32
+var HashChainMaxLength = 128
 
 var Auto = ""
 
-const (
-	StateSync State = iota
-	StateIn
-	StateOut
-	StateAlt
-)
-
-type Mode int
+type State int
 
 const (
-	Same Mode = 1 << iota
-	Newer
-	Older
+	Sync State = 1 << iota
+	Updated
+	Modified
 	Deleted
 	Conflict
-	Folder
+	New
 )
 
-// Document includes information about a file stored on the library. Most information refers on the synchronized state with the exchange.
+// File includes information about a file stored on the library. Most information refers on the synchronized state with the exchange.
+type File struct {
+	Name        string    `json:"name"`
+	Id          uint64    `json:"id"`
+	ModTime     time.Time `json:"modTime"`
+	Size        uint64    `json:"size"`
+	AuthorId    string    `json:"authorId"`
+	ContentType string    `json:"contentType"`
+	Hash        []byte    `json:"hash"`
+	HashChain   [][]byte  `json:"hashChain"`
+	Tags        []string  `json:"tags"`
+	Offset      int
+}
+
+type Local struct {
+	Id        uint64    `json:"id"`
+	Name      string    `json:"name"`
+	Path      string    `json:"path"`
+	AuthorId  string    `json:"authorId"`
+	ModTime   time.Time `json:"modTime"`
+	Size      uint64    `json:"size"`
+	Hash      []byte
+	HashChain [][]byte
+}
+
+type Version struct {
+	AuthorId    string    `json:"authorId"`
+	State       State     `json:"state"`
+	Size        uint64    `json:"size"`
+	ModTime     time.Time `json:"modTime"`
+	ContentType string    `json:"contentType"`
+	Hash        []byte    `json:"hash"`
+	Tags        []string  `json:"tags"`
+	Id          uint64    `json:"id"`
+}
+
 type Document struct {
-	Id           uint64    `json:"id"`
-	Name         string    `json:"name"`
-	Mode         Mode      `json:"mode"`
-	ModTime      time.Time `json:"poolTime"`
-	Size         uint64    `json:"size"`
-	AuthorId     string    `json:"authorId"`
-	ContentType  string    `json:"contentType"`
-	Hash         []byte    `json:"hash"`
-	HashChain    [][]byte  `json:"hashChain"`
-	Tags         []string  `json:"tags"`
-	LocalModTime time.Time `json:"modTime"`
-	LocalPath    string    `json:"localPath"`
-	Offset       int       `json:"offset"`
+	Name      string
+	AuthorId  string
+	LocalPath string
+	Id        uint64
+	ModTime   time.Time
+	State     State
+	Hash      []byte
+	HashChain [][]byte
+	Versions  []Version
+}
+
+type List struct {
+	Folder     string
+	Documents  []Document
+	Subfolders []string
 }
 
 type Library struct {
@@ -73,93 +104,136 @@ func Get(p *pool.Pool, channel string) Library {
 	}
 }
 
-func (l *Library) updateLocals(documents []Document) []Document {
-	for idx := range documents {
-		d := &documents[idx]
-		if d.Mode&Newer > 0 {
-			continue
-		}
-
-		stat, err := os.Stat(d.LocalPath)
-		if err != nil {
-			d.Mode = Deleted
-			sqlSetDocument(l.Pool.Name, l.Channel, *d)
-		} else if stat.ModTime().Sub(d.LocalModTime) > time.Second {
-			d.Mode = Newer
-			sqlSetDocument(l.Pool.Name, l.Channel, *d)
+func containHash(hashChain [][]byte, hash []byte) bool {
+	for _, h := range hashChain {
+		if bytes.Equal(hash, h) {
+			return true
 		}
 	}
-	return documents
+	return false
 }
 
-func compareHistory(local, remote *Document) Mode {
-	if bytes.Equal(local.Hash, remote.Hash) {
-		return Same
+func (l *Library) getStateForLocal(lo Local) State {
+	stat, err := os.Stat(lo.Path)
+	if err != nil {
+		return Deleted
 	}
 
-	for _, l := range local.HashChain {
-		if bytes.Equal(remote.Hash, l) {
-			return Older
-		}
+	diff := stat.ModTime().Sub(lo.ModTime)
+	if diff < time.Second {
+		return Sync
 	}
 
-	for _, r := range remote.HashChain {
-		if bytes.Equal(local.Hash, r) {
-			return Newer
-		}
+	h, _ := security.FileHash(lo.Path)
+	if !bytes.Equal(h, lo.Hash) {
+		return Modified
 	}
-	return Conflict
+
+	lo.ModTime = stat.ModTime()
+	sqlSetLocal(l.Pool.Name, l.Channel, lo)
+
+	return Sync
 }
 
-func (l *Library) updateRemote(documents []Document) []Document {
-	m := map[string]*Document{}
-	for idx := range documents {
-		d := &documents[idx]
-		if d.LocalPath != "" {
-			m[d.Name] = d
+func (l *Library) getDocuments(files []File, locals []Local) ([]Document, error) {
+	m := map[string]Document{}
+
+	for _, lo := range locals {
+		m[lo.Name] = Document{
+			Name:      lo.Name,
+			LocalPath: lo.Path,
+			AuthorId:  lo.AuthorId,
+			State:     l.getStateForLocal(lo),
+			Hash:      lo.Hash,
+			HashChain: lo.HashChain,
+			Id:        lo.Id,
+			ModTime:   lo.ModTime,
 		}
 	}
 
-	for idx := range documents {
-		d := &documents[idx]
-		local := m[d.Name]
-		if d.LocalPath != "" || d.Mode&Conflict > 0 || local == nil {
-			continue
+	for _, f := range files {
+		d, ok := m[f.Name]
+		if !ok {
+			d = Document{
+				Name:      f.Name,
+				State:     New,
+				LocalPath: "",
+			}
+		}
+		v := Version{
+			AuthorId:    f.AuthorId,
+			Size:        f.Size,
+			ModTime:     f.ModTime,
+			ContentType: f.ContentType,
+			Hash:        f.Hash,
+			Tags:        f.Tags,
+			Id:          f.Id,
 		}
 
-		if local.Mode&Newer > 0 {
-			d.Mode = Conflict
-			sqlSetDocument(l.Pool.Name, l.Channel, *d)
+		switch {
+		case d.LocalPath == "":
+			v.State = Updated
+		case f.Id == d.Id:
 			continue
+		case bytes.Equal(f.Hash, d.Hash):
+			continue
+		case containHash(f.HashChain, d.Hash):
+			if d.State == Modified {
+				v.State = Conflict
+				d.State = Conflict
+			} else {
+				v.State = Updated
+				d.State = Updated
+			}
+		case containHash(d.HashChain, f.Hash):
+			continue
+		default:
+			v.State = Conflict
+			d.State = Conflict
 		}
-
-		d.Mode = compareHistory(local, d)
+		d.Versions = append(d.Versions, v)
+		m[d.Name] = d
 	}
-	return documents
+
+	var documents []Document
+	for _, d := range m {
+		documents = append(documents, d)
+	}
+	sort.Slice(documents, func(i, j int) bool {
+		return documents[i].Name < documents[j].Name
+	})
+	return documents, nil
 }
 
 // List returns the documents in provided folder
-func (l *Library) List(folder string) ([]Document, error) {
+func (l *Library) List(folder string) (List, error) {
 	hs, _ := l.Pool.List(sqlGetOffset(l.Pool.Name, l.Channel))
 	for _, h := range hs {
 		l.accept(h)
 	}
 
-	folders, err := sqlGetSubfolders(l.Pool.Name, l.Channel, folder)
-	if core.IsErr(err, "cannot list subfolders in %s/%s/%s", l.Pool.Name, l.Channel, folder) {
-		return nil, err
+	subfolders, err := sqlGetSubfolders(l.Pool.Name, l.Channel, folder)
+	if core.IsErr(err, "cannot list subfolders in %s/%s/%s: %v", l.Pool.Name, l.Channel, folder) {
+		return List{}, err
+	}
+	files, err := sqlFilesInFolder(l.Pool.Name, l.Channel, folder)
+	if core.IsErr(err, "cannot list documents in %s/%s/%s: %v", l.Pool.Name, l.Channel, folder) {
+		return List{}, err
+	}
+	locals, err := sqlGetLocalsInFolder(l.Pool.Name, l.Channel, folder)
+	if core.IsErr(err, "cannot list locals in %s/%s/%s: %v", l.Pool.Name, l.Channel, folder) {
+		return List{}, err
+	}
+	documents, err := l.getDocuments(files, locals)
+	if core.IsErr(err, "cannot join locals and files in %s/%s/%s: %v", l.Pool.Name, l.Channel, folder) {
+		return List{}, err
 	}
 
-	documents, err := sqlGetDocumentsInFolder(l.Pool.Name, l.Channel, folder)
-	if core.IsErr(err, "cannot list documents in %s/%s/%s", l.Pool.Name, l.Channel, folder) {
-		return nil, err
-	}
-
-	documents = l.updateLocals(documents)
-	documents = l.updateRemote(documents)
-
-	documents = append(documents, folders...)
-	return documents, nil
+	return List{
+		Folder:     folder,
+		Subfolders: subfolders,
+		Documents:  documents,
+	}, nil
 }
 
 func (l *Library) Save(id uint64, dest string) error {
@@ -176,14 +250,15 @@ func (l *Library) Save(id uint64, dest string) error {
 	return nil
 }
 
-func (l *Library) Receive(id uint64, localPath string, tags ...string) (pool.Head, error) {
-	f, err := os.Create(localPath)
+func (l *Library) Receive(id uint64, localPath string) (pool.Head, error) {
+	os.MkdirAll(filepath.Dir(localPath), 0755)
+
+	f, err := os.Create(localPath + ".tmp")
 	if core.IsErr(err, "cannot create '%s': %v", localPath) {
 		return pool.Head{}, err
 	}
-	defer f.Close()
 
-	d, ok, err := sqlGetDocument(l.Pool.Name, l.Channel, id)
+	d, ok, err := sqlGetDocumentById(l.Pool.Name, l.Channel, id)
 	if core.IsErr(err, "cannot get document with id '%d': %v", id) {
 		return pool.Head{}, err
 	}
@@ -192,15 +267,29 @@ func (l *Library) Receive(id uint64, localPath string, tags ...string) (pool.Hea
 	}
 
 	err = l.Pool.Receive(id, nil, f)
+	f.Close()
 	if core.IsErr(err, "cannot get file with id %d: %v", id) {
+		os.Remove(localPath + ".tmp")
+		return pool.Head{}, err
+	}
+	err = os.Rename(localPath+".tmp", localPath)
+	if core.IsErr(err, "cannot overwrite old file %s: %v", localPath) {
 		return pool.Head{}, err
 	}
 
 	stat, _ := os.Stat(localPath)
-	d.LocalModTime = stat.ModTime()
-	d.Size = uint64(stat.Size())
+	lo := Local{
+		Id:        id,
+		Name:      d.Name,
+		Path:      localPath,
+		AuthorId:  d.AuthorId,
+		ModTime:   stat.ModTime(),
+		Size:      uint64(stat.Size()),
+		Hash:      d.Hash,
+		HashChain: d.HashChain,
+	}
 
-	err = sqlSetDocument(l.Pool.Name, l.Channel, d)
+	err = sqlSetLocal(l.Pool.Name, l.Channel, lo)
 	if core.IsErr(err, "cannot update document for id %d: %v", id) {
 		return pool.Head{}, err
 	}
@@ -212,20 +301,22 @@ func (l *Library) Delete(id uint64) error {
 }
 
 func (l *Library) GetLocalPath(name string) (string, bool) {
-	d, ok, _ := sqlGetLocal(l.Pool.Name, l.Channel, name)
+	lo, ok, _ := sqlGetLocal(l.Pool.Name, l.Channel, name)
 	if ok {
-		return d.LocalPath, true
+		return lo.Path, true
 	} else {
 		return "", false
 	}
 }
 
-func (l *Library) GetLocalDocument(name string) (Document, bool) {
-	d, ok, _ := sqlGetLocal(l.Pool.Name, l.Channel, name)
-	return d, ok
-}
+// func (l *Library) GetLocalDocument(name string) (File, bool) {
+// 	d, ok, _ := sqlGetLocal(l.Pool.Name, l.Channel, name)
+// 	return d, ok
+// }
 
-func (l *Library) Send(localPath string, name string, tags ...string) (pool.Head, error) {
+// Send uploads the specified file localPath to the pool with the provided name. When solveConflicts is true
+// the
+func (l *Library) Send(localPath string, name string, solveConflicts bool, tags ...string) (pool.Head, error) {
 	mime, err := mimetype.DetectFile(localPath)
 	if core.IsErr(err, "cannot detect mime type of '%s': %v", localPath) {
 		return pool.Head{}, err
@@ -234,17 +325,19 @@ func (l *Library) Send(localPath string, name string, tags ...string) (pool.Head
 	stat, _ := os.Stat(localPath)
 
 	var hashChain [][]byte
-	d, ok, err := sqlGetLocal(l.Pool.Name, l.Channel, name)
+	lo, ok, err := sqlGetLocal(l.Pool.Name, l.Channel, name)
 	if core.IsErr(err, "db error in reading document %s: %v", name) {
 		return pool.Head{}, err
 	}
-	if ok {
-		hashChain = append(d.HashChain, d.Hash)
+	if solveConflicts {
+		hashChain, err = sqlGetFilesHashes(l.Pool.Name, l.Channel, name, HashChainMaxLength)
+		if core.IsErr(err, "cannot get hashes for file %s: %v", name) {
+			return pool.Head{}, err
+		}
+	} else if ok {
+		hashChain = append(lo.HashChain, lo.Hash)
 		if len(hashChain) > HashChainMaxLength {
 			hashChain = hashChain[len(hashChain)-HashChainMaxLength:]
-		}
-		if tags == nil {
-			tags = d.Tags
 		}
 	}
 
@@ -269,25 +362,17 @@ func (l *Library) Send(localPath string, name string, tags ...string) (pool.Head
 	}
 
 	l.Pool.Sync()
-	d = Document{
-		Id:           h.Id,
-		Name:         name,
-		Mode:         Same,
-		ModTime:      h.ModTime,
-		LocalModTime: stat.ModTime(),
-		Size:         uint64(h.Size),
-		AuthorId:     h.AuthorId,
-		ContentType:  mime.String(),
-		Hash:         h.Hash,
-		HashChain:    hashChain,
-		Tags:         tags,
-		LocalPath:    localPath,
-		Offset:       0,
+	lo = Local{
+		Id:        h.Id,
+		Name:      name,
+		Path:      localPath,
+		ModTime:   stat.ModTime(),
+		Size:      uint64(stat.Size()),
+		AuthorId:  h.AuthorId,
+		Hash:      h.Hash,
+		HashChain: hashChain,
 	}
-	err = sqlSetDocument(l.Pool.Name, l.Channel, d)
-	if core.IsErr(err, "cannot set document in db for '%s': %v", localPath) {
-		return pool.Head{}, err
-	}
+	err = sqlSetLocal(l.Pool.Name, l.Channel, lo)
 	return h, err
 }
 
@@ -303,7 +388,7 @@ func (l *Library) accept(head pool.Head) {
 	}
 	name := head.Name[len(l.Channel)+1:]
 
-	d := Document{
+	f := File{
 		Id:          head.Id,
 		Name:        name,
 		ModTime:     head.ModTime,
@@ -311,9 +396,10 @@ func (l *Library) accept(head pool.Head) {
 		AuthorId:    head.AuthorId,
 		ContentType: m.ContentType,
 		Offset:      head.Offset,
+		Hash:        head.Hash,
 		HashChain:   m.HashChain,
 	}
 
-	err = sqlSetDocument(l.Pool.Name, l.Channel, d)
+	err = sqlSetDocument(l.Pool.Name, l.Channel, f)
 	core.IsErr(err, "cannot save document to db: %v")
 }

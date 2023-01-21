@@ -4,6 +4,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"strings"
 
 	"github.com/code-to-go/safepool.lib/core"
 )
@@ -63,14 +64,14 @@ type Exchanger interface {
 }
 
 // NewExchanger creates a new exchanger giving a provided configuration
-func NewExchanger(c Config) (Exchanger, error) {
+func NewExchanger(connectionUrl string) (Exchanger, error) {
 	switch {
-	case c.SFTP != nil:
-		return NewSFTP(*c.SFTP)
-	case c.S3 != nil:
-		return NewS3(*c.S3)
-	case c.Local != nil:
-		return NewLocal(*c.Local)
+	case strings.HasPrefix(connectionUrl, "sftp://"):
+		return NewSFTP(connectionUrl)
+	case strings.HasPrefix(connectionUrl, "s3://"):
+		return NewS3(connectionUrl)
+	case strings.HasPrefix(connectionUrl, "file:/"):
+		return NewLocal(connectionUrl)
 	}
 
 	return nil, core.ErrNoDriver
