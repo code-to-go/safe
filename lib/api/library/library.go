@@ -250,31 +250,31 @@ func (l *Library) Save(id uint64, dest string) error {
 	return nil
 }
 
-func (l *Library) Receive(id uint64, localPath string) (pool.Head, error) {
+func (l *Library) Receive(id uint64, localPath string) (pool.Feed, error) {
 	os.MkdirAll(filepath.Dir(localPath), 0755)
 
 	f, err := os.Create(localPath + ".tmp")
 	if core.IsErr(err, "cannot create '%s': %v", localPath) {
-		return pool.Head{}, err
+		return pool.Feed{}, err
 	}
 
 	d, ok, err := sqlGetDocumentById(l.Pool.Name, l.Channel, id)
 	if core.IsErr(err, "cannot get document with id '%d': %v", id) {
-		return pool.Head{}, err
+		return pool.Feed{}, err
 	}
 	if !ok {
-		return pool.Head{}, core.ErrInvalidId
+		return pool.Feed{}, core.ErrInvalidId
 	}
 
 	err = l.Pool.Receive(id, nil, f)
 	f.Close()
 	if core.IsErr(err, "cannot get file with id %d: %v", id) {
 		os.Remove(localPath + ".tmp")
-		return pool.Head{}, err
+		return pool.Feed{}, err
 	}
 	err = os.Rename(localPath+".tmp", localPath)
 	if core.IsErr(err, "cannot overwrite old file %s: %v", localPath) {
-		return pool.Head{}, err
+		return pool.Feed{}, err
 	}
 
 	stat, _ := os.Stat(localPath)
@@ -291,9 +291,9 @@ func (l *Library) Receive(id uint64, localPath string) (pool.Head, error) {
 
 	err = sqlSetLocal(l.Pool.Name, l.Channel, lo)
 	if core.IsErr(err, "cannot update document for id %d: %v", id) {
-		return pool.Head{}, err
+		return pool.Feed{}, err
 	}
-	return pool.Head{}, nil
+	return pool.Feed{}, nil
 }
 
 func (l *Library) Delete(id uint64) error {
@@ -316,10 +316,10 @@ func (l *Library) GetLocalPath(name string) (string, bool) {
 
 // Send uploads the specified file localPath to the pool with the provided name. When solveConflicts is true
 // the
-func (l *Library) Send(localPath string, name string, solveConflicts bool, tags ...string) (pool.Head, error) {
+func (l *Library) Send(localPath string, name string, solveConflicts bool, tags ...string) (pool.Feed, error) {
 	mime, err := mimetype.DetectFile(localPath)
 	if core.IsErr(err, "cannot detect mime type of '%s': %v", localPath) {
-		return pool.Head{}, err
+		return pool.Feed{}, err
 	}
 
 	stat, _ := os.Stat(localPath)
@@ -327,12 +327,12 @@ func (l *Library) Send(localPath string, name string, solveConflicts bool, tags 
 	var hashChain [][]byte
 	lo, ok, err := sqlGetLocal(l.Pool.Name, l.Channel, name)
 	if core.IsErr(err, "db error in reading document %s: %v", name) {
-		return pool.Head{}, err
+		return pool.Feed{}, err
 	}
 	if solveConflicts {
 		hashChain, err = sqlGetFilesHashes(l.Pool.Name, l.Channel, name, HashChainMaxLength)
 		if core.IsErr(err, "cannot get hashes for file %s: %v", name) {
-			return pool.Head{}, err
+			return pool.Feed{}, err
 		}
 	} else if ok {
 		hashChain = append(lo.HashChain, lo.Hash)
@@ -347,18 +347,18 @@ func (l *Library) Send(localPath string, name string, solveConflicts bool, tags 
 		HashChain:   hashChain,
 	})
 	if core.IsErr(err, "cannot marshal metadata to json: %v") {
-		return pool.Head{}, err
+		return pool.Feed{}, err
 	}
 
 	f, err := os.Open(localPath)
 	if core.IsErr(err, "cannot open '%s': %v", localPath) {
-		return pool.Head{}, err
+		return pool.Feed{}, err
 	}
 	defer f.Close()
 
 	h, err := l.Pool.Send(path.Join(l.Channel, name), f, m)
 	if core.IsErr(err, "cannot post content to pool '%s': %v", l.Pool.Name) {
-		return pool.Head{}, err
+		return pool.Feed{}, err
 	}
 
 	l.Pool.Sync()
@@ -376,27 +376,27 @@ func (l *Library) Send(localPath string, name string, solveConflicts bool, tags 
 	return h, err
 }
 
-func (l *Library) accept(head pool.Head) {
-	if !strings.HasPrefix(head.Name, l.Channel+"/") {
+func (l *Library) accept(feed pool.Feed) {
+	if !strings.HasPrefix(feed.Name, l.Channel+"/") {
 		return
 	}
 
 	var m meta
-	err := json.Unmarshal(head.Meta, &m)
-	if core.IsErr(err, "invalid meta in head: %v") {
+	err := json.Unmarshal(feed.Meta, &m)
+	if core.IsErr(err, "invalid meta in feed: %v") {
 		return
 	}
-	name := head.Name[len(l.Channel)+1:]
+	name := feed.Name[len(l.Channel)+1:]
 
 	f := File{
-		Id:          head.Id,
+		Id:          feed.Id,
 		Name:        name,
-		ModTime:     head.ModTime,
-		Size:        uint64(head.Size),
-		AuthorId:    head.AuthorId,
+		ModTime:     feed.ModTime,
+		Size:        uint64(feed.Size),
+		AuthorId:    feed.AuthorId,
 		ContentType: m.ContentType,
-		Offset:      head.Offset,
-		Hash:        head.Hash,
+		Offset:      feed.Offset,
+		Hash:        feed.Hash,
 		HashChain:   m.HashChain,
 	}
 

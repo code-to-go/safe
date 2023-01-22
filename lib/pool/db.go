@@ -8,62 +8,63 @@ import (
 	"github.com/code-to-go/safepool.lib/sql"
 )
 
-func sqlGetHeads(pool string, offset int) ([]Head, error) {
-	rows, err := sql.Query("GET_HEADS", sql.Args{"pool": pool, "offset": offset})
-	if core.IsErr(err, "cannot get pools heads from db: %v") {
+func sqlGetFeeds(pool string, offset int) ([]Feed, error) {
+	rows, err := sql.Query("GET_FEEDS", sql.Args{"pool": pool, "offset": offset})
+	if core.IsErr(err, "cannot get pools feeds from db: %v") {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var heads []Head
+	var feeds []Feed
 	for rows.Next() {
-		var h Head
+		var f Feed
 		var modTime int64
 		var hash string
 		var meta string
-		err = rows.Scan(&h.Id, &h.Name, &modTime, &h.Size, &h.AuthorId, &hash, &h.Offset, &meta)
-		if !core.IsErr(err, "cannot read pool heads from db: %v") {
-			h.Hash = sql.DecodeBase64(hash)
-			h.ModTime = sql.DecodeTime(modTime)
-			h.Meta = sql.DecodeBase64(meta)
-			heads = append(heads, h)
+		err = rows.Scan(&f.Id, &f.Name, &modTime, &f.Size, &f.AuthorId, &hash, &f.Offset, &meta, &f.Slot)
+		if !core.IsErr(err, "cannot read pool feeds from db: %v") {
+			f.Hash = sql.DecodeBase64(hash)
+			f.ModTime = sql.DecodeTime(modTime)
+			f.Meta = sql.DecodeBase64(meta)
+			feeds = append(feeds, f)
 		}
 	}
-	return heads, nil
+	return feeds, nil
 }
 
-func sqlGetHead(pool string, id uint64) (Head, error) {
-	var h Head
+func sqlGetFeed(pool string, id uint64) (Feed, error) {
+	var f Feed
 	var modTime int64
 	var hash string
 	var meta string
-	err := sql.QueryRow("GET_HEAD", sql.Args{"pool": pool, "id": id},
-		&h.Id, &h.Name, &modTime, &h.Size, &h.AuthorId, &hash, &h.Offset, &meta)
-	if core.IsErr(err, "cannot get head with id '%d' in pool '%s': %v", id, pool) {
-		return Head{}, err
+	err := sql.QueryRow("GET_FEED", sql.Args{"pool": pool, "id": id},
+		&f.Id, &f.Name, &modTime, &f.Size, &f.AuthorId, &hash, &f.Offset, &meta, &f.Slot)
+	if core.IsErr(err, "cannot get feed with id '%d' in pool '%s': %v", id, pool) {
+		return Feed{}, err
 	}
 
-	h.Hash = sql.DecodeBase64(hash)
-	h.ModTime = sql.DecodeTime(modTime)
-	h.Meta = sql.DecodeBase64(meta)
-	return h, nil
+	f.Hash = sql.DecodeBase64(hash)
+	f.ModTime = sql.DecodeTime(modTime)
+	f.Meta = sql.DecodeBase64(meta)
+	return f, nil
 }
 
-func sqlDelHeadBefore(pool string, id uint64) error {
-	_, err := sql.Exec("DEL_HEAD_BEFORE", sql.Args{"pool": pool, "beforeId": id})
+func sqlDelFeedBefore(pool string, id int64) error {
+	_, err := sql.Exec("DEL_FEED_BEFORE", sql.Args{"pool": pool, "beforeId": id})
 	return err
 }
 
-func sqlAddHead(pool string, h Head) error {
-	_, err := sql.Exec("SET_HEAD", sql.Args{
+func sqlAddFeed(pool string, f Feed) error {
+	_, err := sql.Exec("SET_FEED", sql.Args{
 		"pool":     pool,
-		"id":       h.Id,
-		"name":     h.Name,
-		"size":     h.Size,
-		"authorId": h.AuthorId,
-		"modTime":  sql.EncodeTime(h.ModTime),
-		"hash":     sql.EncodeBase64(h.Hash[:]),
-		"meta":     sql.EncodeBase64(h.Meta),
+		"id":       f.Id,
+		"name":     f.Name,
+		"size":     f.Size,
+		"authorId": f.AuthorId,
+		"modTime":  sql.EncodeTime(f.ModTime),
+		"hash":     sql.EncodeBase64(f.Hash[:]),
+		"meta":     sql.EncodeBase64(f.Meta),
+		"slot":     f.Slot,
 	})
 	return err
 }
@@ -160,7 +161,7 @@ func (p *Pool) sqlSetAccess(a Access) error {
 	return err
 }
 
-func sqlSave(name string, c Config) error {
+func sqlSetPool(name string, c Config) error {
 	data, err := json.Marshal(&c)
 	if core.IsErr(err, "cannot marshal transport configuration of %s: %v", name) {
 		return err
@@ -171,7 +172,7 @@ func sqlSave(name string, c Config) error {
 	return err
 }
 
-func sqlLoad(name string) (Config, error) {
+func sqlGetPool(name string) (Config, error) {
 	var blob string
 	var c Config
 	err := sql.QueryRow("GET_POOL", sql.Args{"name": name}, &blob)
@@ -185,7 +186,22 @@ func sqlLoad(name string) (Config, error) {
 	return c, err
 }
 
-func sqlList() ([]string, error) {
+func sqlSetSlot(pool, exchange, slot string) error {
+	_, err := sql.Exec("SET_SLOT", sql.Args{"pool": pool, "exchange": exchange, "slot": slot})
+	core.IsErr(err, "cannot save slot %s: %v", slot)
+	return err
+}
+
+func sqlGetSlot(pool, exchange string) (string, error) {
+	var slot string
+	err := sql.QueryRow("GET_SLOT", sql.Args{"pool": pool, "exchange": exchange}, &slot)
+	if core.IsErr(err, "cannot get slot: %v") {
+		return "", err
+	}
+	return slot, nil
+}
+
+func sqlListPool() ([]string, error) {
 	var names []string
 	rows, err := sql.Query("LIST_POOL", nil)
 	if core.IsErr(err, "cannot list pools: %v") {

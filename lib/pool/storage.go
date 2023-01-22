@@ -1,9 +1,9 @@
 package pool
 
 func Save(name string, config Config) error {
-	return sqlSave(name, config)
+	return sqlSetPool(name, config)
 }
 
 func Load(name string) (Config, error) {
-	return sqlLoad(name)
+	return sqlGetPool(name)
 }

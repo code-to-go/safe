@@ -11,7 +11,6 @@ import (
 
 	"os"
 	"path"
-	"strings"
 
 	"github.com/code-to-go/safepool.lib/core"
 
@@ -184,22 +183,11 @@ func (s *SFTP) Write(name string, source io.Reader) error {
 	return err
 }
 
-func (s *SFTP) ReadDir(prefix string, opts ListOption) ([]fs.FileInfo, error) {
-	dir, prefix := path.Split(prefix)
-	if dir == "" {
-		dir, prefix = prefix, ""
-	}
+func (s *SFTP) ReadDir(dir string, opts ListOption) ([]fs.FileInfo, error) {
 	dir = path.Join(s.base, dir)
-	result, err := s.c.ReadDir(dir)
+	infos, err := s.c.ReadDir(dir)
 	if err != nil {
 		return nil, err
-	}
-
-	var infos []fs.FileInfo
-	for _, item := range result {
-		if strings.HasPrefix(item.Name(), prefix) {
-			infos = append(infos, item)
-		}
 	}
 
 	return infos, nil

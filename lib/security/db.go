@@ -50,7 +50,7 @@ func sqlGetIdentities(onlyTrusted bool) ([]Identity, error) {
 		var i64 string
 		var alias string
 		err = rows.Scan(&i64, &alias)
-		if core.IsErr(err, "cannot read pool heads from db: %v") {
+		if core.IsErr(err, "cannot read pool feeds from db: %v") {
 			continue
 		}
 

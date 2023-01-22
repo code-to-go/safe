@@ -49,7 +49,7 @@ INSERT INTO configs(pool,k,s,i,b) VALUES(:pool,:key,:s,:i,:b)
 	WHERE pool=:pool AND k=:key
 
 -- INIT
-CREATE TABLE IF NOT EXISTS heads (
+CREATE TABLE IF NOT EXISTS feeds (
     offset INTEGER PRIMARY KEY AUTOINCREMENT,
     pool VARCHAR(128) NOT NULL, 
     id INTEGER NOT NULL,
@@ -58,29 +58,30 @@ CREATE TABLE IF NOT EXISTS heads (
     size INTEGER NOT NULL,
     authorId VARCHAR(80) NOT NULL,
     hash VARCHAR(128) NOT NULL, 
-    meta VARCHAR(4096) NOT NULL
+    meta VARCHAR(4096) NOT NULL,
+    slot VARCHAR(16) NOT NULL
 )
 
 -- INIT
-CREATE INDEX IF NOT EXISTS idx_heads_id ON heads(id);
+CREATE INDEX IF NOT EXISTS idx_feeds_id ON feeds(id);
 
 -- INIT
-CREATE INDEX IF NOT EXISTS idx_heads_pool ON heads(pool);
+CREATE INDEX IF NOT EXISTS idx_feeds_pool ON feeds(pool);
 
 -- INIT
-CREATE INDEX IF NOT EXISTS idx_heads_name ON heads(name);
+CREATE INDEX IF NOT EXISTS idx_feeds_name ON feeds(name);
 
--- GET_HEADS
-SELECT id, name, modTime, size, authorId, hash, offset, meta FROM heads WHERE pool=:pool AND offset > :offset ORDER BY offset
+-- GET_FEEDS
+SELECT id, name, modTime, size, authorId, hash, offset, meta, slot FROM feeds WHERE pool=:pool AND offset > :offset ORDER BY offset
 
--- GET_HEAD
-SELECT id, name, modTime, size, authorId, hash, offset, meta FROM heads WHERE pool=:pool AND id=:id
+-- GET_FEED
+SELECT id, name, modTime, size, authorId, hash, offset, meta, slot FROM feeds WHERE pool=:pool AND id=:id
 
--- SET_HEAD
-INSERT INTO heads(pool,id,name,modTime,size,authorId,hash,meta) VALUES(:pool,:id,:name,:modTime,:size,:authorId,:hash,:meta)
+-- SET_FEED
+INSERT INTO feeds(pool,id,name,modTime,size,authorId,hash,meta,slot) VALUES(:pool,:id,:name,:modTime,:size,:authorId,:hash,:meta,:slot)
 
--- DEL_HEAD_BEFORE
-DELETE FROM heads WHERE pool=:pool AND id <:beforeId
+-- DEL_FEED_BEFORE
+DELETE FROM feeds WHERE pool=:pool AND id <:beforeId
 
 -- INIT
 CREATE TABLE IF NOT EXISTS keys (
@@ -103,7 +104,7 @@ INSERT INTO keys(pool,keyId,keyValue) VALUES(:pool,:keyId,:keyValue)
 
 -- INIT
 CREATE TABLE IF NOT EXISTS pools (
-    name VARCHAR(128),
+    name VARCHAR(512),
     configs BLOB,
     PRIMARY KEY(name)
 );
@@ -112,12 +113,28 @@ CREATE TABLE IF NOT EXISTS pools (
 SELECT configs FROM pools WHERE name=:name
 
 -- LIST_POOL
-SELECT name FROM pools
+SELECT DISTINCT name FROM pools
 
 -- SET_POOL
 INSERT INTO pools(name,configs) VALUES(:name,:configs)
     ON CONFLICT(name) DO UPDATE SET configs=:configs
 	    WHERE name=:name
+
+-- INIT
+CREATE TABLE IF NOT EXISTS slots (
+    pool VARCHAR(512),
+    exchange VARCHAR(4096),
+    slot VARCHAR(16),
+    CONSTRAINT pk_pool_exchange PRIMARY KEY(pool,exchange)
+);
+
+-- SET_SLOT
+INSERT INTO slots(pool,exchange,slot) VALUES(:pool,:exchange,:slot)
+    ON CONFLICT(pool,exchange) DO UPDATE SET slot=:slot
+	    WHERE pool=:pool AND exchange=:exchange
+
+-- GET_SLOT
+SELECT slot FROM slots WHERE pool=:pool AND exchange=:exchange
 
 -- INIT
 CREATE TABLE IF NOT EXISTS accesses (

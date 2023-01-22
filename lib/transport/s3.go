@@ -181,26 +181,22 @@ func (s *S3) Write(name string, source io.Reader) error {
 	return err
 }
 
-func (s *S3) ReadDir(prefix string, opts ListOption) ([]fs.FileInfo, error) {
-	if prefix != "" && opts&IsPrefix == 0 {
-		prefix += "/"
-	}
-
+func (s *S3) ReadDir(dir string, opts ListOption) ([]fs.FileInfo, error) {
 	input := &s3.ListObjectsInput{
 		Bucket:    aws.String(s.bucket),
-		Prefix:    aws.String(prefix),
+		Prefix:    aws.String(dir + "/"),
 		Delimiter: aws.String("/"),
 	}
 
 	result, err := s.svc.ListObjects(input)
 	if err != nil {
-		logrus.Errorf("cannot list %s/%s: %v", s.String(), prefix, err)
+		logrus.Errorf("cannot list %s/%s: %v", s.String(), dir, err)
 		return nil, err
 	}
 
 	var infos []fs.FileInfo
 	for _, item := range result.Contents {
-		cut := strings.LastIndex(prefix, "/")
+		cut := len(path.Clean(dir))
 		name := (*item.Key)[cut+1:]
 
 		infos = append(infos, simpleFileInfo{
@@ -216,7 +212,7 @@ func (s *S3) ReadDir(prefix string, opts ListOption) ([]fs.FileInfo, error) {
 }
 
 func (s *S3) Stat(name string) (fs.FileInfo, error) {
-	head, err := s.svc.HeadObject(&s3.HeadObjectInput{
+	feed, err := s.svc.HeadObject(&s3.HeadObjectInput{
 		Bucket: &s.bucket,
 		Key:    &name,
 	})
@@ -234,9 +230,9 @@ func (s *S3) Stat(name string) (fs.FileInfo, error) {
 
 	return simpleFileInfo{
 		name:    path.Base(name),
-		size:    *head.ContentLength,
+		size:    *feed.ContentLength,
 		isDir:   strings.HasSuffix(name, "/"),
-		modTime: *head.LastModified,
+		modTime: *feed.LastModified,
 	}, nil
 }
 

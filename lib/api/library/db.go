@@ -191,33 +191,3 @@ func sqlGetFilesHashes(pool string, base string, name string, limit int) ([][]by
 	}
 	return hashes, nil
 }
-
-// type FileLocal struct {
-// 	File  File
-// 	Local Local
-// }
-
-// func sqlGetFilesLocalsInFolder(pool string, base string, folder string) ([]FileLocal, error) {
-// 	rows, err := sql.Query("GET_LIBRARY_FILES_LOCALS_IN_FOLDER", sql.Args{"pool": pool, "base": base, "folder": folder})
-// 	if core.IsErr(err, "cannot query documents from db: %v") {
-// 		return nil, err
-// 	}
-// 	var fileLocals []FileLocal
-// 	for rows.Next() {
-// 		var f FileLocal
-// 		var hash string
-// 		var hashChain []byte
-// 		var modTime int64
-
-// 		err = rows.Scan(&f.File.Name, &f.File.AuthorId, &modTime, &f.File.Id,
-// 			&f.File.Size, &f.File.ContentType, &hash, &hashChain, &f.File.Offset,
-// 		)
-// 		if !core.IsErr(err, "cannot scan row in Documents: %v", err) {
-// 			d.Hash = sql.DecodeBase64(hash)
-// 			json.Unmarshal(hashChain, &d.HashChain)
-// 			d.ModTime = sql.DecodeTime(modTime)
-// 			fileLocals = append(fileLocals, d)
-// 		}
-// 	}
-// 	return fileLocals, nil
-// }

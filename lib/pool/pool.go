@@ -30,7 +30,7 @@ var ErrInvalidConfig = errors.New("provided config is invalid: missing name or c
 
 type Consumer interface {
 	TimeOffset(s *Pool) time.Time
-	Accept(s *Pool, h Head) bool
+	Accept(s *Pool, h Feed) bool
 }
 
 type Pool struct {
@@ -59,7 +59,7 @@ type Identity struct {
 	AddedOn time.Time
 }
 
-type Head struct {
+type Feed struct {
 	Id        uint64
 	Name      string
 	Size      int64
@@ -68,7 +68,8 @@ type Head struct {
 	AuthorId  string
 	Signature []byte
 	Meta      []byte
-	Offset    int `json:"-"`
+	Offset    int    `json:"-"`
+	Slot      string `json:"-"`
 }
 
 const (
@@ -79,6 +80,7 @@ const (
 var ForceCreation = false
 var ReplicaPeriod = time.Hour
 var CacheSizeMB = 16
+var FeedDateFormat = "20060102"
 
 type Config struct {
 	Name    string
@@ -87,12 +89,12 @@ type Config struct {
 }
 
 func List() []string {
-	names, _ := sqlList()
+	names, _ := sqlListPool()
 	return names
 }
 
 func Create(self security.Identity, name string) (*Pool, error) {
-	config, err := sqlLoad(name)
+	config, err := sqlGetPool(name)
 	if core.IsErr(err, "unknown pool %s: %v", name) {
 		return nil, err
 	}
@@ -147,7 +149,7 @@ func Create(self security.Identity, name string) (*Pool, error) {
 
 // Init initialized a domain on the specified exchangers
 func Open(self security.Identity, name string) (*Pool, error) {
-	config, err := sqlLoad(name)
+	config, err := sqlGetPool(name)
 	if core.IsErr(err, "unknown pool %s: %v", name) {
 		return nil, err
 	}
@@ -171,32 +173,33 @@ func Open(self security.Identity, name string) (*Pool, error) {
 	return p, err
 }
 
-type AcceptFunc func(head Head)
+type AcceptFunc func(feed Feed)
 
 const All = ""
 
-func (p *Pool) List(offset int) ([]Head, error) {
-	hs, err := sqlGetHeads(p.Name, offset)
-	if core.IsErr(err, "cannot read Pool heads: %v") {
+func (p *Pool) List(offset int) ([]Feed, error) {
+	hs, err := sqlGetFeeds(p.Name, offset)
+	if core.IsErr(err, "cannot read Pool feeds: %v") {
 		return nil, err
 	}
 	return hs, err
 }
 
-func (p *Pool) Send(name string, r io.Reader, meta []byte) (Head, error) {
+func (p *Pool) Send(name string, r io.Reader, meta []byte) (Feed, error) {
 	id := snowflake.ID()
-	n := path.Join(p.Name, FeedsFolder, fmt.Sprintf("%d.body", id))
+	slot := core.Now().Format(FeedDateFormat)
+	n := path.Join(p.Name, FeedsFolder, slot, fmt.Sprintf("%d.body", id))
 	hr, err := p.writeFile(n, r)
 	if core.IsErr(err, "cannot post file %s to %s: %v", name, p.e) {
-		return Head{}, err
+		return Feed{}, err
 	}
 
 	hash := hr.Hash()
 	signature, err := security.Sign(p.Self, hash)
 	if core.IsErr(err, "cannot sign file %s.body in %s: %v", name, p.e) {
-		return Head{}, err
+		return Feed{}, err
 	}
-	h := Head{
+	f := Feed{
 		Id:        id,
 		Name:      name,
 		Size:      hr.Size(),
@@ -205,30 +208,27 @@ func (p *Pool) Send(name string, r io.Reader, meta []byte) (Head, error) {
 		AuthorId:  p.Self.Id(),
 		Signature: signature,
 		Meta:      meta,
+		Slot:      slot,
 	}
-	data, err := json.Marshal(h)
+	data, err := json.Marshal(f)
 	if core.IsErr(err, "cannot marshal header to json: %v") {
-		return Head{}, err
+		return Feed{}, err
 	}
 
-	n = path.Join(p.Name, FeedsFolder, fmt.Sprintf("%d.head", id))
+	n = path.Join(p.Name, FeedsFolder, slot, fmt.Sprintf("%d.head", id))
 	_, err = p.writeFile(n, bytes.NewBuffer(data))
 	core.IsErr(err, "cannot write header %s.head in %s: %v", name, p.e)
 
-	return h, nil
+	return f, nil
 }
 
 func (p *Pool) Receive(id uint64, rang *transport.Range, w io.Writer) error {
-	h, err := sqlGetHead(p.Name, id)
-	if err != nil {
-		headName := path.Join(p.Name, FeedsFolder, fmt.Sprintf("%d.head", id))
-		h, err = p.readHead(headName)
-		if core.IsErr(err, "cannot read header '%s': %v") {
-			return err
-		}
+	f, err := sqlGetFeed(p.Name, id)
+	if core.IsErr(err, "cannot retrieve %d from pool %v: %v", id, p) {
+		return err
 	}
 
-	bodyName := path.Join(p.Name, FeedsFolder, fmt.Sprintf("%d.body", id))
+	bodyName := path.Join(p.Name, FeedsFolder, f.Slot, fmt.Sprintf("%d.body", id))
 	cached, err := p.getFromCache(bodyName, rang, w)
 	if cached {
 		return err
@@ -244,7 +244,7 @@ func (p *Pool) Receive(id uint64, rang *transport.Range, w io.Writer) error {
 		return err
 	}
 	hash := hr.Hash()
-	if !bytes.Equal(hash, h.Hash) {
+	if !bytes.Equal(hash, f.Hash) {
 		return ErrInvalidSignature
 	}
 
@@ -325,4 +325,8 @@ func (p *Pool) SetAccess(userId string, state State) error {
 	}
 
 	return p.exportAccessFile()
+}
+
+func (p *Pool) ToString() string {
+	return fmt.Sprintf("%s [%v]", p.Name, p.e)
 }

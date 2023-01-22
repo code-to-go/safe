@@ -9,7 +9,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/code-to-go/safepool.lib/core"
@@ -107,13 +106,7 @@ func (l *Local) Write(name string, source io.Reader) error {
 	return err
 }
 
-func (l *Local) ReadDir(name string, opts ListOption) ([]fs.FileInfo, error) {
-	var dir, prefix string
-	if opts&IsPrefix > 0 {
-		dir, prefix = filepath.Split(filepath.Join(l.base, name))
-	} else {
-		dir = filepath.Join(l.base, name)
-	}
+func (l *Local) ReadDir(dir string, opts ListOption) ([]fs.FileInfo, error) {
 	result, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -121,11 +114,9 @@ func (l *Local) ReadDir(name string, opts ListOption) ([]fs.FileInfo, error) {
 
 	var infos []fs.FileInfo
 	for _, item := range result {
-		if strings.HasPrefix(item.Name(), prefix) {
-			info, err := item.Info()
-			if err == nil {
-				infos = append(infos, info)
-			}
+		info, err := item.Info()
+		if err == nil {
+			infos = append(infos, info)
 		}
 	}
 

@@ -54,9 +54,9 @@ func (c *Chat) TimeOffset(s *pool.Pool) int {
 	return sqlGetOffset(s.Name)
 }
 
-func (c *Chat) Accept(s *pool.Pool, head pool.Head) bool {
-	name := head.Name
-	if !strings.HasPrefix(name, "/chat/") || !strings.HasSuffix(name, ".chat") || head.Size > 10*1024*1024 {
+func (c *Chat) Accept(s *pool.Pool, feed pool.Feed) bool {
+	name := feed.Name
+	if !strings.HasPrefix(name, "/chat/") || !strings.HasSuffix(name, ".chat") || feed.Size > 10*1024*1024 {
 		return false
 	}
 	name = path.Base(name)
@@ -66,25 +66,25 @@ func (c *Chat) Accept(s *pool.Pool, head pool.Head) bool {
 	}
 
 	buf := bytes.Buffer{}
-	err = s.Receive(head.Id, nil, &buf)
-	if core.IsErr(err, "cannot read %s from %s: %v", head.Name, s.Name) {
+	err = s.Receive(feed.Id, nil, &buf)
+	if core.IsErr(err, "cannot read %s from %s: %v", feed.Name, s.Name) {
 		return true
 	}
 
 	var m Message
 	err = json.Unmarshal(buf.Bytes(), &m)
-	if core.IsErr(err, "invalid chat message %s: %v", head.Name) {
+	if core.IsErr(err, "invalid chat message %s: %v", feed.Name) {
 		return true
 	}
 
 	h := getHash(&m)
 	if !security.Verify(m.Author, h, m.Signature) {
-		logrus.Error("message %s has invalid signature", head.Name)
+		logrus.Error("message %s has invalid signature", feed.Name)
 		return true
 	}
 
-	err = sqlSetMessage(s.Name, uint64(id), m.Author, m, head.Offset)
-	core.IsErr(err, "cannot write message %s to db:%v", head.Name)
+	err = sqlSetMessage(s.Name, uint64(id), m.Author, m, feed.Offset)
+	core.IsErr(err, "cannot write message %s to db:%v", feed.Name)
 	return true
 }
 
@@ -119,7 +119,7 @@ func (c *Chat) SendMessage(content string, contentType string, attachments [][]b
 	return m.Id, nil
 }
 
-func (c *Chat) accept(h pool.Head) {
+func (c *Chat) accept(h pool.Feed) {
 	name := h.Name
 	if !strings.HasPrefix(name, c.Channel) || !strings.HasSuffix(name, ".chat") || h.Size > 10*1024*1024 {
 		return
