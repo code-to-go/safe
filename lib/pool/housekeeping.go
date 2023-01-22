@@ -2,7 +2,7 @@ package pool
 
 import (
 	"fmt"
-	"math/rand"
+	"log"
 	"path"
 	"strconv"
 	"strings"
@@ -13,36 +13,34 @@ import (
 	"github.com/godruoyi/go-snowflake"
 )
 
-// LifeSpan is the maximal time data should stay in the pool. It is default to 30 days and it cannot be less than 7.
-var LifeSpan = 30 * 24 * time.Hour
+// LifeSpan is the maximal time data should stay in the pool. It is default to 30 days.
+var LifeSpan = time.Hour //30 * 24 * time.Hour
 
-const sevenDays = 7 * 24 * time.Hour
+// func (p *Pool) startHouseKeeping() {
+// 	if LifeSpan < sevenDays {
+// 		LifeSpan = sevenDays
+// 	}
 
-func (p *Pool) startHouseKeeping() {
-	if LifeSpan < sevenDays {
-		LifeSpan = sevenDays
-	}
+// 	LifeSpan = time.Hour
 
-	LifeSpan = time.Hour
-	p.houseKeeping = time.NewTicker(time.Hour)
-	p.stopHouseKeeping = make(chan bool)
+// 	go func() {
+// 		rand.Seed(time.Now().UnixNano())
+// 		n := rand.Intn(600)
+// 		time.Sleep(time.Duration(n) * time.Second)
+// 		p.stopHouseKeeping = make(chan bool)
+// 		p.houseKeeping = time.NewTicker(time.Hour)
 
-	go func() {
-		rand.Seed(time.Now().UnixNano())
-		n := rand.Intn(600)
-		time.Sleep(time.Duration(n) * time.Second)
-
-		for {
-			p.HouseKeeping()
-			select {
-			case <-p.stopHouseKeeping:
-				return
-			case <-p.houseKeeping.C:
-				continue
-			}
-		}
-	}()
-}
+// 		for {
+// 			p.HouseKeeping()
+// 			select {
+// 			case <-p.stopHouseKeeping:
+// 				return
+// 			case <-p.houseKeeping.C:
+// 				continue
+// 			}
+// 		}
+// 	}()
+// }
 
 func (p *Pool) getAllSlots(e transport.Exchanger) []string {
 	fs, err := e.ReadDir(path.Join(p.Name, FeedsFolder), 0)
@@ -56,13 +54,13 @@ func (p *Pool) getAllSlots(e transport.Exchanger) []string {
 	return slots
 }
 
-// HouseKeeping removes old files from the pool. It is automatically called once a day and there is not need to call programmatically
+// HouseKeeping removes old files from the pool. It is called automatically when you use Sync after an hour;
+// use explicitly only when your application does not use sync or does not live longer than 1 hour
 func (p *Pool) HouseKeeping() {
 	p.houseKeepingLock.Lock()
 	defer p.houseKeepingLock.Unlock()
 
-	thresold := core.Since(core.SnowFlakeStart) - LifeSpan
-	thresoldId := int64(thresold << (snowflake.SequenceLength + snowflake.MachineIDLength))
+	thresoldId := p.BaseId()
 	for _, e := range p.exchangers {
 		slots := p.getAllSlots(e)
 		for _, slot := range slots {
@@ -82,7 +80,7 @@ func (p *Pool) HouseKeeping() {
 					continue
 				}
 
-				if id < thresoldId {
+				if uint64(id) < thresoldId {
 					p.e.Delete(path.Join(p.Name, FeedsFolder, slot, fmt.Sprintf("%s.head", name)))
 					p.e.Delete(path.Join(p.Name, FeedsFolder, slot, fmt.Sprintf("%s.body", name)))
 				}
@@ -90,5 +88,17 @@ func (p *Pool) HouseKeeping() {
 		}
 	}
 
-	sqlDelFeedBefore(p.Name, thresoldId)
+	sqlDelFeedBefore(p.Name, int64(thresoldId))
+}
+
+func (p *Pool) BaseId() uint64 {
+	thresold := (core.Since(core.SnowFlakeStart) - LifeSpan) / time.Millisecond
+
+	if thresold < 0 {
+		thresold = 0
+	}
+	if thresold >= 1<<41 {
+		log.Fatalf("Current time %v is bigger that longest possible with the current snowFlake start %v", core.Now(), core.SnowFlakeStart)
+	}
+	return uint64(thresold) << (snowflake.SequenceLength + snowflake.MachineIDLength)
 }

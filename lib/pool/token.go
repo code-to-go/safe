@@ -17,8 +17,11 @@ type Token struct {
 
 func EncodeToken(t Token, guestId string) (string, error) {
 	tk, err := json.Marshal(Token{
-		Config: t.Config,
-		Host:   t.Host.Public(),
+		Config: Config{
+			Name:   t.Config.Name,
+			Public: t.Config.Public,
+		},
+		Host: t.Host.Public(),
 	})
 	if core.IsErr(err, "cannot marshal config to token: %v") {
 		return "", err

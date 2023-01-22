@@ -8,13 +8,12 @@ import (
 	"time"
 
 	"github.com/code-to-go/safepool.lib/core"
-	"github.com/godruoyi/go-snowflake"
 )
 
 const FeedsFolder = "feeds"
 
 func (p *Pool) getSlots() ([]string, error) {
-	slot, _ := sqlGetSlot(p.Name, p.e.String())
+	last, _ := sqlGetSlot(p.Name, p.e.String())
 
 	fs, err := p.e.ReadDir(path.Join(p.Name, FeedsFolder), 0)
 	if core.IsErr(err, "cannot list slots in '%v': %v", p) {
@@ -23,8 +22,8 @@ func (p *Pool) getSlots() ([]string, error) {
 
 	var slots []string
 	for _, f := range fs {
-		if f.Name() >= slot {
-			slots = append(slots, slot)
+		if f.Name() >= last {
+			slots = append(slots, f.Name())
 		}
 	}
 
@@ -48,19 +47,19 @@ func (p *Pool) Sync() error {
 		return err
 	}
 
-	thresold := uint64(core.Since(core.SnowFlakeStart) - LifeSpan)
+	thresold := p.BaseId()
 	for _, slot := range slots {
-		fs, err := p.e.ReadDir(path.Join(p.Name, FeedsFolder), 0)
+		fs, err := p.e.ReadDir(path.Join(p.Name, FeedsFolder, slot), 0)
 		if core.IsErr(err, "cannot read content in slot %s in pool", slot, p) {
 			continue
 		}
 		for _, f := range fs {
 			name := f.Name()
-			if !strings.HasSuffix(name, ".feed") {
+			if !strings.HasSuffix(name, ".head") {
 				continue
 			}
 
-			id, err := strconv.ParseInt(name[0:len(name)-len(".feed")], 10, 64)
+			id, err := strconv.ParseInt(name[0:len(name)-len(".head")], 10, 64)
 			if err != nil {
 				continue
 			}
@@ -68,13 +67,13 @@ func (p *Pool) Sync() error {
 				continue
 			}
 
-			sid := snowflake.ParseID(uint64(id))
-			if sid.Timestamp < thresold {
+			if id < int64(thresold) {
 				continue
 			}
 
-			f, err := p.readHead(path.Join(p.Name, name))
-			if core.IsErr(err, "cannot read file %s from %s: %v", name, p.e) {
+			n := path.Join(p.Name, FeedsFolder, slot, name)
+			f, err := p.readHead(n)
+			if core.IsErr(err, "cannot read file %s from %s: %v", n, p.e) {
 				continue
 			}
 			f.Slot = slot
@@ -84,9 +83,10 @@ func (p *Pool) Sync() error {
 		sqlSetSlot(p.Name, p.e.String(), slot)
 	}
 
-	if time.Until(p.lastReplica) > ReplicaPeriod {
+	if time.Until(p.lastHouseKeeping) > ReplicaPeriod {
+		p.HouseKeeping()
 		p.replica()
-		p.lastReplica = core.Now()
+		p.lastHouseKeeping = core.Now()
 	}
 	return nil
 }

@@ -11,7 +11,7 @@
             "mode": "auto",
             "console": "integratedTerminal",
             "program": "${workspaceFolder}/cli",
-            "args": ["-d", "safepool.db"],
+            "args": ["-v", "0","-d", "safepool.db"],
         },
         {
             "name": "cli.aurora",
@@ -20,7 +20,7 @@
             "mode": "auto",
             "console": "integratedTerminal",
             "program": "${workspaceFolder}/cli",
-            "args": ["-v", "2", "-d", "aurora.db"],
+            "args": ["-v", "0", "-d", "aurora.db"],
         }
     ]
 }

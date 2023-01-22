@@ -43,12 +43,12 @@ type Pool struct {
 	exchangers       []transport.Exchanger
 	masterKeyId      uint64
 	masterKey        []byte
-	lastReplica      time.Time
+	lastHouseKeeping time.Time
 	accessHash       []byte
 	config           Config
-	houseKeeping     *time.Ticker
+	// houseKeeping     *time.Ticker
 	houseKeepingLock sync.Mutex
-	stopHouseKeeping chan bool
+	// stopHouseKeeping chan bool
 }
 
 type Identity struct {
@@ -100,10 +100,10 @@ func Create(self security.Identity, name string) (*Pool, error) {
 	}
 
 	p := &Pool{
-		Name:        name,
-		Self:        self,
-		lastReplica: core.Now(),
-		config:      config,
+		Name:             name,
+		Self:             self,
+		lastHouseKeeping: core.Now(),
+		config:           config,
 	}
 	err = p.connectSafe(config)
 	if err != nil {
@@ -169,7 +169,7 @@ func Open(self security.Identity, name string) (*Pool, error) {
 
 	_, err = p.sync(p.e)
 
-	p.startHouseKeeping()
+	//	p.startHouseKeeping()
 	return p, err
 }
 
@@ -251,7 +251,8 @@ func (p *Pool) Receive(id uint64, rang *transport.Range, w io.Writer) error {
 	return nil
 }
 
-func (p *Pool) Fork(name string, ids []string) (Config, error) {
+func (p *Pool) Fork(sub string, ids []string) (Config, error) {
+	name := fmt.Sprintf("%s/subs/%s", p.Name, sub)
 	c := Config{
 		Name:    name,
 		Public:  p.config.Public,
@@ -277,9 +278,11 @@ func (p *Pool) Fork(name string, ids []string) (Config, error) {
 }
 
 func (p *Pool) Close() {
-	p.stopHouseKeeping <- true
-	p.houseKeepingLock.Lock()
-	defer p.houseKeepingLock.Unlock()
+	// if p.houseKeeping != nil {
+	// 	p.stopHouseKeeping <- true
+	// 	p.houseKeepingLock.Lock()
+	// 	defer p.houseKeepingLock.Unlock()
+	// }
 
 	for _, e := range p.exchangers {
 		_ = e.Close()

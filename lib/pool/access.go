@@ -86,7 +86,7 @@ func (p *Pool) importIdentities() error {
 
 		identity, ok := m[n]
 		if !ok || identity.Nick == "❓ Incognito..." || rand.Intn(100) > 95 {
-			name := path.Join(p.Name, n)
+			name := path.Join(p.Name, IdentityFolder, n)
 			i, err := p.readIdentity(name)
 			if !core.IsErr(err, "cannot read identity from '%s': %v", name) {
 				security.SetIdentity(i)
