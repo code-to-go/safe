@@ -1,10 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"math"
+	"regexp"
 	"strings"
 
 	"github.com/code-to-go/safepool.lib/api/chat"
+	"github.com/code-to-go/safepool.lib/core"
 	"github.com/code-to-go/safepool.lib/pool"
 	"github.com/fatih/color"
 	"github.com/manifoldco/promptui"
@@ -12,13 +15,96 @@ import (
 
 func printChatHelp() {
 	color.White("commands: ")
-	color.White("  '' once refresh chat content")
-	color.White("  '' twice back to App list")
+	color.White("  '' refresh chat content")
+	color.White("  \\x exit chat")
+	color.White("  \\c create a sub pool")
+}
+
+var isValidName = regexp.MustCompile(`^[a-zA-Z0-9#]+$`).MatchString
+
+func createChat(c chat.Chat) {
+
+	var name string
+	for {
+		prompt := promptui.Prompt{
+			Label:       "Pool name (only alphanumeric and #): ",
+			HideEntered: true,
+		}
+
+		name, _ = prompt.Run()
+		if name == "" {
+			return
+		}
+		if isValidName(name) {
+			break
+		}
+		color.Red("Invalid name '%s'. Name can contain only alphanumeric letters and #.", name)
+	}
+
+	selfId := c.Pool.Self.Id()
+	selected := map[string]bool{}
+	for {
+		items := []string{"Complete"}
+		identities, _ := c.Pool.Identities()
+		for idx, i := range identities {
+			id := i.Id()
+			if id == selfId {
+				if idx < len(identities)-1 {
+					identities[idx] = identities[len(identities)-1]
+					identities[len(identities)-1] = i
+				} else {
+					continue
+				}
+			}
+			if selected[id] {
+				items = append(items, fmt.Sprintf("✓ %s [%s]", i.Nick, id))
+			} else {
+				items = append(items, fmt.Sprintf("  %s [%s]", i.Nick, id))
+			}
+		}
+
+		sel := promptui.Select{
+			Label: "Select users for the new pool",
+			Items: items,
+		}
+		idx, _, err := sel.Run()
+		if err != nil {
+			return
+		}
+
+		if idx == 0 {
+			break
+		}
+		id := identities[idx-1].Id()
+		selected[id] = !selected[id]
+	}
+
+	var ids []string
+	for id, ok := range selected {
+		if ok {
+			ids = append(ids, id)
+		}
+	}
+
+	co, err := c.Pool.CreateBranch(name, ids)
+	if core.IsErr(err, "cannot create branch in pool %v: %v", c.Pool) {
+		color.Red("😱 something went wrong!")
+	}
+
+	token := pool.Token{
+		Config: co,
+		Host:   c.Pool.Self,
+	}
+	for _, id := range ids {
+		tk, err := pool.EncodeToken(token, id)
+		if err == nil {
+			c.SendMessage(fmt.Sprintf("%s,%s", id, tk), "application/token", nil)
+		}
+	}
 }
 
 func Chat(p *pool.Pool) {
 	var lastId uint64
-	var lastInput string
 	c := chat.Get(p, "chat")
 
 	identities, err := p.Identities()
@@ -42,7 +128,7 @@ func Chat(p *pool.Pool) {
 		}
 		for _, m := range messages {
 			if m.Author == selfId {
-				color.Blue(": %s", m.Content)
+				color.Blue("%s: %s", id2nick[m.Author], m.Content)
 			} else {
 				color.Green("%s: %s", id2nick[m.Author], m.Content)
 			}
@@ -59,10 +145,11 @@ func Chat(p *pool.Pool) {
 		t = strings.Trim(t, " ")
 
 		switch {
-		case len(t) == 0 && lastInput == "":
-			return
 		case len(t) == 0:
-			color.Green("Enter again to exit")
+		case strings.HasPrefix(t, "\\x"):
+			return
+		case strings.HasPrefix(t, "\\c"):
+			createChat(c)
 		case strings.HasPrefix(t, "\\?"):
 			printChatHelp()
 		case strings.HasPrefix(t, "\\"):
@@ -73,6 +160,5 @@ func Chat(p *pool.Pool) {
 				color.Red("cannot send message: %s")
 			}
 		}
-		lastInput = t
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -154,8 +155,9 @@ func Open(self security.Identity, name string) (*Pool, error) {
 		return nil, err
 	}
 	p := &Pool{
-		Name: name,
-		Self: self,
+		Name:   name,
+		Self:   self,
+		config: config,
 	}
 	err = p.connectSafe(config)
 	if err != nil {
@@ -251,8 +253,15 @@ func (p *Pool) Receive(id uint64, rang *transport.Range, w io.Writer) error {
 	return nil
 }
 
-func (p *Pool) Fork(sub string, ids []string) (Config, error) {
-	name := fmt.Sprintf("%s/subs/%s", p.Name, sub)
+func (p *Pool) CreateBranch(sub string, ids []string) (Config, error) {
+	var name string
+	parts := strings.Split(p.Name, "/")
+	if len(parts) > 2 && parts[len(parts)-2] == "branches" {
+		name = fmt.Sprintf("%s/%s", strings.Join(parts[0:len(parts)-2], "/"), sub)
+	} else {
+		name = fmt.Sprintf("%s/branches/%s", p.Name, sub)
+	}
+
 	c := Config{
 		Name:    name,
 		Public:  p.config.Public,
