@@ -1,6 +1,7 @@
 <script>
   import {
     BlockTitle,
+    Button,
     f7,
     f7ready,
     Icon,
@@ -27,25 +28,37 @@
     GetPoolList,
     GetMessages,
     GetSelf,
+    GetSelfId,
     PostMessage,
+    DecodeToken,
+    AddPool,
   } from "../../wailsjs/go/main/App";
-  import { pool } from "../../wailsjs/go/models";
+//  import { pool } from "../../wailsjs/go/models";
 
   let messagebarInstance;
 
   export let poolName
 
-  let selfIdentity
+  let selfId
   let time = 'loading...'
   let messages = []
   let lastId = '9223372036854775807'
   onMount(async () => {
-    selfIdentity = await GetSelf();
+    selfId = await GetSelfId();
+    console.log(`self id=${selfId}`)
   })
 
   onMount(async () => {
     messages = (await GetMessages(poolName, '0', lastId, 32)) || [];
     time = messages.length > 0 ? new Date(messages[0].time) : null
+ 
+
+    for (let i=0;i<messages.length;i++) {
+      messages[i] = await processMessage(messages[i])
+      console.log(messages[i])
+    }
+
+    messages = messages.filter(m => m.content != null)
     console.log(messages)
   });
 
@@ -57,6 +70,30 @@
       messagebarInstance = f7.messagebar.get(".messagebar");
     });
   });
+
+  function acceptToken(tk) {
+    AddPool(tk)
+  }
+
+  async function processMessage(m) {
+    if (m && m.contentType == 'safepool/token') {
+      if (!m.content.startsWith(selfId+':')) {
+//        return null
+        m.content = null
+      }
+    try {
+      const tk = m.content.substr(selfId.length+1)
+      const token = await DecodeToken(tk)
+      console.log('Token: ', token)
+      m.content = `🔥 ${token.Host.n} is inviting you to join <b>${token.Config.Name.replace('/branches/', ' ⊃ ')}</b><br>
+                   <a href="#" class="button" style="color: Gold;float:right" 
+                      on:click={_=>acceptToken(tk)}>Accept</hr>` 
+    } catch (e) {
+      console.log('something went wrong: ', e)
+    }
+  }
+    return m
+  }
 
   function isFirstMessage(message, index) {
     const previousMessage = messages[index - 1];
@@ -84,7 +121,7 @@
     const text = messageText.replace(/\n/g, "<br>").trim();
     if (text.length) {
       const m = {
-        author: selfIdentity.s.P,
+        author: selfId,
         contentType: "text/html",
         content: text,
       }
@@ -119,8 +156,8 @@
     <MessagesTitle><b>{time}</b></MessagesTitle>
     {#each messages as message, index (index)}
       <Message
-        type={selfIdentity == message.author ? "received" : "sent"}
-        name={selfIdentity == message.author ? null : message.author.nick}
+        type={selfId == message.author ? "received" : "sent"}
+        name={selfId == message.author ? null : message.author.nick}
         first={isFirstMessage(message, index)}
         last={isLastMessage(message, index)}
         tail={isTailMessage(message, index)}

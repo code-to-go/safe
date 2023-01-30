@@ -22,6 +22,8 @@ func printChatHelp() {
 
 var isValidName = regexp.MustCompile(`^[a-zA-Z0-9#]+$`).MatchString
 
+const tokenContentType = "safepool/token"
+
 func createChat(c chat.Chat) {
 
 	var name string
@@ -86,7 +88,7 @@ func createChat(c chat.Chat) {
 		}
 	}
 
-	co, err := c.Pool.CreateBranch(name, ids)
+	co, err := c.Pool.CreateBranch(name, ids, c.Pool.Apps)
 	if core.IsErr(err, "cannot create branch in pool %v: %v", c.Pool) {
 		color.Red("😱 something went wrong!")
 	}
@@ -98,13 +100,50 @@ func createChat(c chat.Chat) {
 	for _, id := range ids {
 		tk, err := pool.EncodeToken(token, id)
 		if err == nil {
-			c.SendMessage(fmt.Sprintf("%s,%s", id, tk), "application/token", nil)
+			c.SendMessage(fmt.Sprintf("%s:%s", id, tk), tokenContentType, nil)
 		}
+	}
+}
+
+func processToken(c chat.Chat, m chat.Message, tokens []pool.Token) []pool.Token {
+	selfId := c.Pool.Self.Id()
+	if strings.HasPrefix(m.Content, selfId) {
+		tk := m.Content[len(selfId)+1:]
+		t, err := pool.DecodeToken(c.Pool.Self, tk)
+		if err == nil {
+			tokens = append(tokens, t)
+			color.Cyan("\t🔥 %s is inviting you to join %s; enter \\a to accept", t.Host.Nick, t.Config.Name)
+		}
+	}
+	return tokens
+}
+
+func acceptTokens(c chat.Chat, tokens []pool.Token) {
+	items := []string{"cancel"}
+	for _, t := range tokens {
+		items = append(items, fmt.Sprintf("%s by %s", t.Host.Nick, t.Config.Name))
+	}
+
+	sel := promptui.Select{
+		Label: "Select the pool you want to join",
+		Items: items,
+	}
+	choice, _, err := sel.Run()
+	if err != nil || choice == 0 {
+		return
+	}
+
+	err = pool.Define(tokens[choice-1].Config)
+	if err == nil {
+		color.Green("Congrats. You can now access to '%s'", tokens[choice-1].Config.Name)
+	} else {
+		color.Red("Something went wrong: %v", err)
 	}
 }
 
 func Chat(p *pool.Pool) {
 	var lastId uint64
+	var tokens []pool.Token
 	c := chat.Get(p, "chat")
 
 	identities, err := p.Identities()
@@ -127,10 +166,15 @@ func Chat(p *pool.Pool) {
 			return
 		}
 		for _, m := range messages {
+			if m.ContentType == tokenContentType {
+				tokens = processToken(c, m, tokens)
+				continue
+			}
+
 			if m.Author == selfId {
 				color.Blue("%s: %s", id2nick[m.Author], m.Content)
 			} else {
-				color.Green("%s: %s", id2nick[m.Author], m.Content)
+				color.Green("\t%s: %s", id2nick[m.Author], m.Content)
 			}
 			if m.Id > lastId {
 				lastId = m.Id
@@ -150,6 +194,8 @@ func Chat(p *pool.Pool) {
 			return
 		case strings.HasPrefix(t, "\\c"):
 			createChat(c)
+		case strings.HasPrefix(t, "\\a"):
+			acceptTokens(c, tokens)
 		case strings.HasPrefix(t, "\\?"):
 			printChatHelp()
 		case strings.HasPrefix(t, "\\"):

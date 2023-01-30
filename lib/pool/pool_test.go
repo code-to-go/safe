@@ -3,8 +3,11 @@ package pool
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/adrg/xdg"
 
 	"github.com/code-to-go/safepool.lib/core"
 	"github.com/code-to-go/safepool.lib/security"
@@ -20,10 +23,10 @@ var config = Config{
 }
 
 func TestSafeCreation(t *testing.T) {
-	sql.DbName = "safepool.test.db"
+	dpPath := filepath.Join(xdg.ConfigHome, "safepool.test.db")
 	sql.DeleteDB()
 	sql.LoadSQLFromFile("../api/sqlite.sql")
-	err := sql.OpenDB()
+	err := sql.OpenDB(dpPath)
 	assert.NoErrorf(t, err, "cannot open db")
 
 	self, err := security.NewIdentity("test")
@@ -34,7 +37,7 @@ func TestSafeCreation(t *testing.T) {
 
 	ForceCreation = true
 	ReplicaPeriod = 0
-	s, err := Create(self, "test.safepool.net/public")
+	s, err := Create(self, "test.safepool.net/public", nil)
 	assert.NoErrorf(t, err, "Cannot create pool: %v", err)
 	s.Close()
 
@@ -61,10 +64,10 @@ func TestSafeCreation(t *testing.T) {
 }
 
 func BenchmarkSafe(b *testing.B) {
-	sql.DbName = "safepool.test.db"
+	sql.DbPath = filepath.Join(xdg.ConfigHome, "safepool.test.db")
 	sql.DeleteDB()
 	sql.LoadSQLFromFile("../sql/sqlite.sql")
-	err := sql.OpenDB()
+	err := sql.OpenDB(sql.DbPath)
 	assert.NoErrorf(b, err, "cannot open db")
 
 	self, err := security.NewIdentity("test")
@@ -75,7 +78,7 @@ func BenchmarkSafe(b *testing.B) {
 
 	ForceCreation = true
 	ReplicaPeriod = 0
-	s, err := Create(self, "test.safepool.net/public")
+	s, err := Create(self, "test.safepool.net/public", nil)
 	assert.NoErrorf(b, err, "Cannot create pool: %v", err)
 	s.Close()
 
@@ -102,10 +105,10 @@ func BenchmarkSafe(b *testing.B) {
 }
 
 func TestSafeReplica(t *testing.T) {
-	sql.DbName = "safepool.test.db"
+	sql.DbPath = filepath.Join(xdg.ConfigHome, "safepool.test.db")
 	sql.DeleteDB()
 	sql.LoadSQLFromFile("../sql/sqlite.sql")
-	err := sql.OpenDB()
+	err := sql.OpenDB(sql.DbPath)
 	assert.NoErrorf(t, err, "cannot open db")
 
 	self, err := security.NewIdentity("test")
@@ -118,7 +121,7 @@ func TestSafeReplica(t *testing.T) {
 	ReplicaPeriod = time.Second * 5
 
 	now := core.Now()
-	s, err := Create(self, "test.safepool.net/public")
+	s, err := Create(self, "test.safepool.net/public", nil)
 	creationTime := core.Since(now)
 	assert.NoErrorf(t, err, "Cannot create pool: %v", err)
 	defer s.Close()

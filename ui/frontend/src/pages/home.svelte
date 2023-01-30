@@ -83,8 +83,8 @@
           {#each pools as pool}
             <ListItem
               reloadDetail={theme.aurora}
-              link="/pools/{pool.replace('/', '|')}"
-              title={pool}
+              link="/pools/{btoa(pool)}"
+              title={pool.replace('/branches/', ' ⊃ ')}
             >
               <i class="icon icon-f7" slot="media" />
             </ListItem>

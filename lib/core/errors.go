@@ -26,3 +26,11 @@ func IsErr(err error, msg string, args ...interface{}) bool {
 	}
 	return false
 }
+
+func FatalIf(err error, msg string, args ...interface{}) {
+	if err != nil {
+		args = append(args, err)
+		logrus.Fatalf(msg, args...)
+		panic(err)
+	}
+}

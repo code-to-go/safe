@@ -48,35 +48,33 @@ export namespace chat {
 
 export namespace library {
 	
-	export class Document {
-	    id: number;
+	export class File {
 	    name: string;
-	    size: number;
+	    id: number;
 	    // Go type: time.Time
 	    modTime: any;
-	    author: security.Identity;
+	    size: number;
+	    authorId: string;
 	    contentType: string;
 	    hash: number[];
-	    localPath: string;
-	    tmpPath: string;
-	    hasChanged: boolean;
+	    hashChain: number[][];
+	    tags: string[];
 	
 	    static createFrom(source: any = {}) {
-	        return new Document(source);
+	        return new File(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
 	        this.name = source["name"];
-	        this.size = source["size"];
+	        this.id = source["id"];
 	        this.modTime = this.convertValues(source["modTime"], null);
-	        this.author = this.convertValues(source["author"], security.Identity);
+	        this.size = source["size"];
+	        this.authorId = source["authorId"];
 	        this.contentType = source["contentType"];
 	        this.hash = source["hash"];
-	        this.localPath = source["localPath"];
-	        this.tmpPath = source["tmpPath"];
-	        this.hasChanged = source["hasChanged"];
+	        this.hashChain = source["hashChain"];
+	        this.tags = source["tags"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

@@ -10,6 +10,10 @@ export function CreatePool(arg1) {
   return window['go']['main']['App']['CreatePool'](arg1);
 }
 
+export function DecodeToken(arg1) {
+  return window['go']['main']['App']['DecodeToken'](arg1);
+}
+
 export function GetConfigTemplate() {
   return window['go']['main']['App']['GetConfigTemplate']();
 }
@@ -32,6 +36,10 @@ export function GetPoolList() {
 
 export function GetSelf() {
   return window['go']['main']['App']['GetSelf']();
+}
+
+export function GetSelfId() {
+  return window['go']['main']['App']['GetSelfId']();
 }
 
 export function GetToken(arg1, arg2) {

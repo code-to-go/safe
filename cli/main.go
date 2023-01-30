@@ -2,18 +2,20 @@ package main
 
 import (
 	"flag"
+	"path"
 
+	"github.com/adrg/xdg"
 	"github.com/code-to-go/safepool.lib/api"
-	"github.com/code-to-go/safepool.lib/sql"
 	"github.com/sirupsen/logrus"
 )
 
+var dbName = "safepool.db"
+
 func parseFlags() {
 	var verbose int
-	var dbname string
 
 	flag.IntVar(&verbose, "v", 0, "verbose level - 0 to 2")
-	flag.StringVar(&dbname, "d", "", "location of the SQLlite DB")
+	flag.StringVar(&dbName, "d", "", "location of the SQLlite DB")
 	flag.Parse()
 
 	switch verbose {
@@ -24,15 +26,12 @@ func parseFlags() {
 	case 2:
 		logrus.SetLevel(logrus.DebugLevel)
 	}
-
-	if dbname != "" {
-		sql.DbName = dbname
-	}
 }
 
 func main() {
-
 	parseFlags()
-	api.Start()
+
+	dbPath := path.Join(xdg.ConfigHome, dbName)
+	api.Start(dbPath)
 	SelectMain()
 }

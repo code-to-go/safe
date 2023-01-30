@@ -37,6 +37,7 @@ type AccessFile struct {
 	Nonce       []byte
 	MasterKeyId uint64
 	Keystore    []byte
+	Apps        []string
 }
 
 const IdentityFolder = "identities"
@@ -107,6 +108,8 @@ func (p *Pool) sync(e transport.Exchanger) (hash.Hash, error) {
 	if core.IsErr(err, "cannot read access file:%v") {
 		return nil, err
 	}
+	p.Apps = a.Apps
+
 	if bytes.Equal(h.Sum(nil), p.accessHash) {
 		return h, nil
 	}
@@ -162,6 +165,7 @@ func (p *Pool) exportAccessFile() error {
 		Nonce:       nonce,
 		MasterKeyId: p.masterKeyId,
 		Keystore:    keystore,
+		Apps:        p.Apps,
 	}
 	_, err = p.writeAccessFile(p.e, a)
 	if core.IsErr(err, "cannot write access file: %v") {

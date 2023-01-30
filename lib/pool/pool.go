@@ -39,6 +39,7 @@ type Pool struct {
 	Self      security.Identity
 	Consumers []Consumer
 	Trusted   bool
+	Apps      []string
 
 	e                transport.Exchanger
 	exchangers       []transport.Exchanger
@@ -94,7 +95,7 @@ func List() []string {
 	return names
 }
 
-func Create(self security.Identity, name string) (*Pool, error) {
+func Create(self security.Identity, name string, apps []string) (*Pool, error) {
 	config, err := sqlGetPool(name)
 	if core.IsErr(err, "unknown pool %s: %v", name) {
 		return nil, err
@@ -253,7 +254,7 @@ func (p *Pool) Receive(id uint64, rang *transport.Range, w io.Writer) error {
 	return nil
 }
 
-func (p *Pool) CreateBranch(sub string, ids []string) (Config, error) {
+func (p *Pool) CreateBranch(sub string, ids []string, apps []string) (Config, error) {
 	var name string
 	parts := strings.Split(p.Name, "/")
 	if len(parts) > 2 && parts[len(parts)-2] == "branches" {
@@ -273,7 +274,7 @@ func (p *Pool) CreateBranch(sub string, ids []string) (Config, error) {
 		return Config{}, err
 	}
 
-	p2, err := Create(p.Self, name)
+	p2, err := Create(p.Self, name, apps)
 	if core.IsErr(err, "cannot create Forked pool %s: %v", name) {
 		return Config{}, err
 	}

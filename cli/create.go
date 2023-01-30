@@ -58,7 +58,7 @@ func Create() {
 			continue
 		}
 
-		p, err := pool.Create(api.Self, c.Name)
+		p, err := pool.Create(api.Self, c.Name, api.Apps)
 		if core.IsErr(err, "cannot create pool: %v") {
 			color.Red("Cannot create pool: %v", err)
 			continue

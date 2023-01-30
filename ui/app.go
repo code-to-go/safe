@@ -2,17 +2,19 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
+	"path/filepath"
 	"strconv"
 
+	"github.com/adrg/xdg"
 	"github.com/code-to-go/safepool.lib/api"
 	"github.com/code-to-go/safepool.lib/api/chat"
 	"github.com/code-to-go/safepool.lib/api/library"
 	"github.com/code-to-go/safepool.lib/core"
-	pool "github.com/code-to-go/safepool.lib/pool"
+	"github.com/code-to-go/safepool.lib/pool"
 	"github.com/code-to-go/safepool.lib/security"
 	"github.com/code-to-go/safepool.lib/transport"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -23,7 +25,9 @@ type App struct {
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	api.Start()
+	dbPath := filepath.Join(xdg.ConfigHome, "safepool.test.db")
+	core.FatalIf(api.Start(dbPath), "cannot initialize pool: %v")
+
 	for _, n := range pool.List() {
 		p, err := pool.Open(api.Self, n)
 		if err == nil {
@@ -86,7 +90,7 @@ func (a *App) CreatePool(config string) (string, error) {
 		return "", err
 	}
 
-	p, err := pool.Create(api.Self, c.Name)
+	p, err := pool.Create(api.Self, c.Name, api.Apps)
 	if core.IsErr(err, "cannot create pool '%s': %v", c.Name) {
 		return "", err
 	}
@@ -102,34 +106,7 @@ func (a *App) CreatePool(config string) (string, error) {
 }
 
 func (a *App) AddPool(token string) error {
-	var c pool.Config
-
-	bs, err := base64.StdEncoding.DecodeString(token)
-	if core.IsErr(err, "cannot decode token: %v") {
-		return err
-	}
-	err = yaml.Unmarshal(bs, &c)
-	if core.IsErr(err, "cannot unmarshal config from token: %v") {
-		return err
-	}
-
-	if c.Name == "" || (len(c.Public)+len(c.Private)) == 0 {
-		core.IsErr(pool.ErrInvalidToken, "invalid config '%s': %v", string(bs))
-		return pool.ErrInvalidToken
-	} else {
-		core.Info("valid token for pool '%s'", c.Name)
-	}
-
-	err = pool.Define(c)
-	if core.IsErr(err, "cannot define pool '%s': %v", c.Name) {
-		return err
-	}
-	p, err := pool.Open(api.Self, c.Name)
-	if core.IsErr(err, "cannot open pool '%s': %v", c.Name) {
-		return err
-	}
-	pools[p.Name] = p
-	return nil
+	return api.AddPool(token)
 }
 
 func (a *App) GetMessages(poolName string, afterIdS string, beforeIdS string, limit int) ([]chat.Message, error) {
@@ -220,4 +197,14 @@ func (a *App) UpdateIdentity(identity security.Identity) error {
 
 func (a *App) GetSelf() security.Identity {
 	return api.Self.Public()
+}
+
+func (a *App) GetSelfId() string {
+	return api.Self.Id()
+}
+
+func (a *App) DecodeToken(token string) (pool.Token, error) {
+	t, err := pool.DecodeToken(api.Self, token)
+	logrus.Infof("%v", t)
+	return t, err
 }

@@ -3,19 +3,17 @@ package sql
 import (
 	"database/sql"
 	"errors"
-	"io/ioutil"
+
 	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/adrg/xdg"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
 )
 
-var DbName = "safepool.db"
 var db *sql.DB
 var InitDDL string
+var DbPath string
 
 func createTables() error {
 	parts := strings.Split(InitDDL, "\n\n")
@@ -51,7 +49,7 @@ func createTables() error {
 
 // LoadSQLFromFile loads the sql queries from the provided file path. It panics in case the file cannot be loaded
 func LoadSQLFromFile(name string) {
-	ddl, err := ioutil.ReadFile(name)
+	ddl, err := os.ReadFile(name)
 	if err != nil {
 		logrus.Panicf("cannot load SQL queries from %s: %v", name, err)
 		panic(err)
@@ -60,27 +58,27 @@ func LoadSQLFromFile(name string) {
 	InitDDL = string(ddl)
 }
 
-func OpenDB() error {
+func OpenDB(dbPath string) error {
 	if db != nil {
 		return nil
 	}
 
-	dbPath := filepath.Join(xdg.ConfigHome, DbName)
-	_, err := os.Stat(dbPath)
+	DbPath = dbPath
+	_, err := os.Stat(DbPath)
 	if errors.Is(err, os.ErrNotExist) {
-		err := ioutil.WriteFile(dbPath, []byte{}, 0644)
+		err := os.WriteFile(dbPath, []byte{}, 0644)
 		if err != nil {
-			logrus.Errorf("cannot create SQLite db in %s: %v", dbPath, err)
+			logrus.Errorf("cannot create SQLite db in %s: %v", DbPath, err)
 			return err
 		}
 
 	} else if err != nil {
-		logrus.Errorf("cannot access SQLite db file %s: %v", dbPath, err)
+		logrus.Errorf("cannot access SQLite db file %s: %v", DbPath, err)
 	}
 
-	db, err = sql.Open("sqlite3", dbPath)
+	db, err = sql.Open("sqlite3", DbPath)
 	if err != nil {
-		logrus.Errorf("cannot open SQLite db in %s: %v", dbPath, err)
+		logrus.Errorf("cannot open SQLite db in %s: %v", DbPath, err)
 		return err
 	}
 
@@ -97,6 +95,5 @@ func CloseDB() error {
 }
 
 func DeleteDB() error {
-	dbPath := filepath.Join(xdg.ConfigHome, DbName)
-	return os.Remove(dbPath)
+	return os.Remove(DbPath)
 }

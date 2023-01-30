@@ -2,8 +2,8 @@ package main
 
 /*
 typedef struct Result{
+    char* res;
 	char* err;
-    char* data;
 } Result;
 
 typedef struct App {
@@ -16,53 +16,79 @@ import "C"
 import (
 	"encoding/json"
 
-	pool "github.com/code-to-go/safepool.lib/pool"
+	"github.com/code-to-go/safepool.lib/api"
+	"github.com/code-to-go/safepool.lib/pool"
 )
 
-//export start
-func start() C.Result {
-	var res C.Result
+func cResult(v any, err error) C.Result {
+	var res []byte
 
-	return res
+	if err != nil {
+		return C.Result{nil, C.CString(err.Error())}
+	}
+	if v == nil {
+		return C.Result{nil, nil}
+	}
+
+	res, err = json.Marshal(v)
+	if err == nil {
+		return C.Result{C.CString(string(res)), nil}
+	}
+	return C.Result{nil, C.CString(err.Error())}
+}
+
+func cInput(err error, i *C.char, v any) error {
+	if err != nil {
+		return err
+	}
+	data := C.GoString(i)
+	return json.Unmarshal([]byte(data), v)
+}
+
+//export start
+func start(dbPath *C.char) C.Result {
+	p := C.GoString(dbPath)
+	return cResult(nil, api.Start(p))
 }
 
 //export stop
 func stop() C.Result {
-	var res C.Result
-	return res
+	return cResult(nil, nil)
 }
 
-//export setDomain
-func setDomain(domainDef *C.char) *C.char {
-	return nil
+//export getSelfId
+func getSelfId() C.Result {
+	return cResult(api.Self.Id(), nil)
 }
 
-//export saveSafe
-func saveSafe(nameC *C.char, configsC *C.char) *C.char {
-	name := C.GoString(nameC)
-	configsS := C.GoString(configsC)
+//export getSelf
+func getSelf() C.Result {
+	return cResult(api.Self, nil)
+}
 
+//export getPoolList
+func getPoolList() C.Result {
+	return cResult(pool.List(), nil)
+}
+
+//export createPool
+func createPool(config *C.char, apps *C.char) C.Result {
 	var c pool.Config
-	err := json.Unmarshal([]byte(configsS), &c)
+	var apps_ []string
+
+	err := cInput(nil, config, &c)
+	err = cInput(err, apps, &apps_)
 	if err != nil {
-		return C.CString(err.Error())
+		return cResult(nil, err)
 	}
 
-	if err = pool.Save(name, c); err != nil {
-		return C.CString(err.Error())
-	}
-	return nil
+	err = api.CreatePool(c, apps_)
+	return cResult(nil, err)
 }
 
-//export openSafe
-func openSafe(nameC *C.char, handle *C.int) *C.char {
-	name := C.GoString(nameC)
-	pool.Load(name)
+//export addPool
+func addPool(token *C.char) C.Result {
+	err := api.AddPool(C.GoString(token))
 
-	return nil
-}
-
-//export createSafe
-func createSafe(nameDef *C.char, jsonConfig *C.char, handle *C.int) *C.char {
-	return nil
+	return cResult(nil, err)
 }

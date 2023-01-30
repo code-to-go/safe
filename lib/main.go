@@ -2,13 +2,10 @@ package main
 
 import (
 	_ "embed"
-	"fmt"
 
-	"github.com/code-to-go/safepool.lib/api"
+	"github.com/code-to-go/safepool.lib/core"
 )
 
 func main() {
-	api.Start()
-	fmt.Print("This is just a library! ")
-
+	core.Info("This is just a library! ")
 }

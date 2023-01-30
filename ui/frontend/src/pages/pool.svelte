@@ -13,15 +13,15 @@
   } from "framework7-svelte";
   import Chat from "./chat.svelte";
   import Library from "./library.svelte";
-  import People from "./bathers.svelte";
-  import Bathers from "./bathers.svelte";
+  import People from "./people.svelte";
+  import Bathers from "./people.svelte";
 
   export let poolName;
   let activeFeature = "chat";
 </script>
 
 <Page pageContent={false}>
-  <Navbar title={poolName} backLink="Back">
+  <Navbar title={atob(poolName).replace('/branches/', ' ⊃ ')} backLink="Back">
     <NavRight>
       <Button
         active={activeFeature == "chat"}
@@ -42,17 +42,17 @@
         onClick={() => (activeFeature = "bathers")}
       >
         <Icon material="face" />
-        Bathers
+        People
       </Button>
     </NavRight>
   </Navbar>
   {#if activeFeature == "chat"}
-    <Chat {poolName} />
+    <Chat poolName={atob(poolName)} />
   {/if}
   {#if activeFeature == "library"}
-    <Library {poolName} />
+    <Library poolName={atob(poolName)} />
   {/if}
   {#if activeFeature == "bathers"}
-    <Bathers {poolName} />
+    <Bathers poolName={atob(poolName)} />
   {/if}
 </Page>

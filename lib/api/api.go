@@ -2,26 +2,44 @@ package api
 
 import (
 	_ "embed"
+	"encoding/base64"
 	"fmt"
 	"math/rand"
 	"time"
 
 	"github.com/code-to-go/safepool.lib/core"
+	"github.com/code-to-go/safepool.lib/pool"
 	"github.com/code-to-go/safepool.lib/security"
 	"github.com/code-to-go/safepool.lib/sql"
+	"gopkg.in/yaml.v3"
 )
+
+var Apps = []string{
+	"chat",
+	"library",
+}
 
 var Self security.Identity
 
 //go:embed sqlite.sql
 var sqlliteDDL string
 
-func Start() {
+// SetDbPath set the full path where the DB will be created. Useful on Android/iOS platforms
+func SetDbPath(dbPath string) {
+	sql.DbPath = dbPath
+}
+
+// SetDbName set the name of the DB file. Useful for test purpose
+func SetDbName(dbName string) {
+	sql.DbPath = dbName
+}
+
+func Start(dbPath string) error {
 	sql.InitDDL = sqlliteDDL
 
-	err := sql.OpenDB()
-	if err != nil {
-		panic("cannot open DB")
+	err := sql.OpenDB(dbPath)
+	if core.IsErr(err, "cannot open DB: %v") {
+		return err
 	}
 
 	s, _, _, ok := sqlGetConfig("", "SELF")
@@ -53,10 +71,7 @@ func Start() {
 		}
 
 	}
-	if err != nil {
-		panic("corrupted identity in DB")
-	}
-
+	return err
 }
 
 func SetNick(nick string) error {
@@ -68,4 +83,49 @@ func SetNick(nick string) error {
 	err = sqlSetConfig("", "SELF", s, 0, nil)
 	core.IsErr(err, "cannot save nick to db: %v")
 	return err
+}
+
+func CreatePool(c pool.Config, apps []string) error {
+	err := pool.Define(c)
+	if core.IsErr(err, "cannot define pool %v: %s", c.Name) {
+		return err
+	}
+
+	p, err := pool.Create(Self, c.Name, apps)
+	if core.IsErr(err, "cannot create pool %v: %s", c.Name) {
+		return err
+	}
+	p.Close()
+	return nil
+}
+
+func AddPool(token string) error {
+	var c pool.Config
+	bs, err := base64.StdEncoding.DecodeString(token)
+	if core.IsErr(err, "cannot decousterde token: %v") {
+		return err
+	}
+	err = yaml.Unmarshal(bs, &c)
+	if core.IsErr(err, "cannot unmarshal config from token: %v") {
+		return err
+	}
+
+	if c.Name == "" || (len(c.Public)+len(c.Private)) == 0 {
+		core.IsErr(pool.ErrInvalidToken, "invalid config '%s': %v", string(bs))
+		return pool.ErrInvalidToken
+	} else {
+		core.Info("valid token for pool '%s'", c.Name)
+	}
+
+	err = pool.Define(c)
+	if core.IsErr(err, "cannot define pool '%s': %v", c.Name) {
+		return err
+	}
+	p, err := pool.Open(Self, c.Name)
+	if core.IsErr(err, "cannot open pool '%s': %v", c.Name) {
+		return err
+	}
+	p.Close()
+
+	return nil
 }
