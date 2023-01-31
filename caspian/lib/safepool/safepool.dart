@@ -1,6 +1,7 @@
 import 'dart:ffi' as ffi; // For FFI
 import 'dart:io'; // For Platform.isX
 import 'dart:convert';
+import 'package:caspian/safepool/safepool_def.dart';
 import "package:ffi/ffi.dart";
 import 'safepool_platform_interface.dart';
 
@@ -83,12 +84,16 @@ String getSelfId() {
 
 typedef GetPoolList = CResult Function();
 List<String> getPoolList() {
-  var getPoolListC = lib.lookupFunction<GetSelfId, GetSelfId>("getPoolList");
+  var getPoolListC =
+      lib.lookupFunction<GetPoolList, GetPoolList>("getPoolList");
   return getPoolListC().unwrapList().map((e) => e as String).toList();
 }
 
-typedef CreatePool = CResult Function(ffi.Pointer<Utf8>);
-List<String> createPool() {
-  var getPoolListC = lib.lookupFunction<GetSelfId, GetSelfId>("getPoolList");
-  return getPoolListC().unwrapList().map((e) => e as String).toList();
+typedef CreatePool = CResult Function(ffi.Pointer<Utf8>, ffi.Pointer<Utf8>);
+void createPool(PoolConfig c, List<String> apps) {
+  var createPoolC = lib.lookupFunction<CreatePool, CreatePool>("createPool");
+  var appsJson = "[${apps.map((e) => jsonEncode(e)).toList().join(",")}]";
+  var cJson = jsonEncode(c.toJson());
+  return createPoolC(cJson.toNativeUtf8(), appsJson.toNativeUtf8())
+      .unwrapVoid();
 }

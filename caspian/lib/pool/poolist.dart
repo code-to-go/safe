@@ -25,9 +25,11 @@ class PoolList extends StatelessWidget {
         title: const Text("Pools"),
         actions: [
           Padding(
-            padding: EdgeInsets.only(right: 20.0),
+            padding: const EdgeInsets.only(right: 20.0),
             child: GestureDetector(
-                onTap: () {},
+                onTap: () {
+                  Navigator.pushNamed(context, "/addPool");
+                },
                 child: const Icon(
                   Icons.add,
                 )),

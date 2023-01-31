@@ -2,6 +2,7 @@ class PoolConfig {
   String name = "";
   List<String> public_ = [];
   List<String> private_ = [];
+  PoolConfig();
 
   PoolConfig.fromJson(Map<String, dynamic> json)
       : name = json['name'],

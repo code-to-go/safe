@@ -21,7 +21,7 @@ void main() {
         var height = screen?.frame.height ?? 800;
         var width = (screen?.frame.width ?? 1024) * 0.2;
         // if (width < 200) width = 200;
-        //if (width > 600) width = 600;
+        if (width > 600) width = 600;
 
         appWindow.minSize = Size(width, height);
         appWindow.size = Size(width, height);
