@@ -7,13 +7,12 @@ import (
 	"strconv"
 
 	"github.com/adrg/xdg"
-	"github.com/code-to-go/safepool/api"
-	"github.com/code-to-go/safepool/apps/chat"
-	"github.com/code-to-go/safepool/apps/library"
-	"github.com/code-to-go/safepool/core"
-	"github.com/code-to-go/safepool/pool"
-	"github.com/code-to-go/safepool/security"
-	"github.com/code-to-go/safepool/transport"
+	"github.com/code-to-go/safe/safepool/apps/chat"
+	"github.com/code-to-go/safe/safepool/apps/library"
+	"github.com/code-to-go/safe/safepool/core"
+	"github.com/code-to-go/safe/safepool/pool"
+	"github.com/code-to-go/safe/safepool/security"
+	"github.com/code-to-go/safe/safepool/transport"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
@@ -26,10 +25,10 @@ type App struct {
 // NewApp creates a new App application struct
 func NewApp() *App {
 	dbPath := filepath.Join(xdg.ConfigHome, "safepool.test.db")
-	core.FatalIf(api.Start(dbPath), "cannot initialize pool: %v")
+	core.FatalIf(safepool.Start(dbPath), "cannot initialize pool: %v")
 
 	for _, n := range pool.List() {
-		p, err := pool.Open(api.Self, n)
+		p, err := pool.Open(safepool.Self, n)
 		if err == nil {
 			pools[n] = p
 		}
@@ -52,7 +51,7 @@ func (a *App) Greet(name string) string {
 }
 
 func (a *App) GetNick() string {
-	return api.Self.Nick
+	return safepool.Self.Nick
 }
 
 func (a *App) GetPoolList() []string {
@@ -90,7 +89,7 @@ func (a *App) CreatePool(config string) (string, error) {
 		return "", err
 	}
 
-	p, err := pool.Create(api.Self, c.Name, api.Apps)
+	p, err := pool.Create(safepool.Self, c.Name, safepool.Apps)
 	if core.IsErr(err, "cannot create pool '%s': %v", c.Name) {
 		return "", err
 	}
@@ -98,7 +97,7 @@ func (a *App) CreatePool(config string) (string, error) {
 
 	token, err := pool.EncodeToken(pool.Token{
 		Config: c,
-		Host:   api.Self,
+		Host:   safepool.Self,
 	}, "")
 	core.IsErr(err, "cannot encode universal token: %v")
 
@@ -106,7 +105,7 @@ func (a *App) CreatePool(config string) (string, error) {
 }
 
 func (a *App) AddPool(token string) error {
-	_, err := api.AddPool(token)
+	_, err := safepool.AddPool(token)
 	return err
 }
 
@@ -148,7 +147,7 @@ func (a *App) GetToken(poolName string, guestId string) (string, error) {
 
 		t := pool.Token{
 			Config: c,
-			Host:   api.Self,
+			Host:   safepool.Self,
 		}
 
 		if guestId != "" {
@@ -168,7 +167,7 @@ func (a *App) ListLibrary(poolName string) []library.File {
 			Id:          1,
 			Name:        "test.doc",
 			Size:        192922,
-			AuthorId:    api.Self.Id(),
+			AuthorId:    safepool.Self.Id(),
 			ContentType: "application/word",
 			// LocalPath:   "~/Documents/pools/safepool.ch/test.doc",
 			// Mode:        library.Sync,
@@ -177,7 +176,7 @@ func (a *App) ListLibrary(poolName string) []library.File {
 			Id:          1,
 			Name:        "test2.doc",
 			Size:        192922,
-			AuthorId:    api.Self.Id(),
+			AuthorId:    safepool.Self.Id(),
 			ContentType: "application/word",
 			// LocalPath:   "~/Documents/pools/safepool.ch/test.doc",
 			// Mode:        library.Sync,
@@ -197,15 +196,15 @@ func (a *App) UpdateIdentity(identity security.Identity) error {
 }
 
 func (a *App) GetSelf() security.Identity {
-	return api.Self.Public()
+	return safepool.Self.Public()
 }
 
 func (a *App) GetSelfId() string {
-	return api.Self.Id()
+	return safepool.Self.Id()
 }
 
 func (a *App) DecodeToken(token string) (pool.Token, error) {
-	t, err := pool.DecodeToken(api.Self, token)
+	t, err := pool.DecodeToken(safepool.Self, token)
 	logrus.Infof("%v", t)
 	return t, err
 }

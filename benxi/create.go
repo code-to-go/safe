@@ -4,9 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/code-to-go/safepool/api"
-	"github.com/code-to-go/safepool/core"
-	"github.com/code-to-go/safepool/pool"
+	"github.com/code-to-go/safe/safepool/core"
+	"github.com/code-to-go/safe/safepool/pool"
 	"github.com/fatih/color"
 	"github.com/manifoldco/promptui"
 	"gopkg.in/yaml.v3"
@@ -58,7 +57,7 @@ func Create() {
 			continue
 		}
 
-		p, err := pool.Create(api.Self, c.Name, api.Apps)
+		p, err := pool.Create(safepool.Self, c.Name, safepool.Apps)
 		if core.IsErr(err, "cannot create pool: %v") {
 			color.Red("Cannot create pool: %v", err)
 			continue

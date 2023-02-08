@@ -1,14 +1,13 @@
 package main
 
 import (
-	"github.com/code-to-go/safepool/api"
-	"github.com/code-to-go/safepool/pool"
+	"github.com/code-to-go/safe/safepool/pool"
 	"github.com/fatih/color"
 	"github.com/manifoldco/promptui"
 )
 
 func ChooseFunction(poolName string) {
-	p, err := pool.Open(api.Self, poolName)
+	p, err := pool.Open(safepool.Self, poolName)
 	if err != nil {
 		color.Red("cannot open pool '%s': %v", poolName, err)
 		return
@@ -69,6 +68,6 @@ func SelectMain() {
 }
 
 func Settings() {
-	color.Green("My Nick: %s", api.Self.Nick)
-	color.Green("My Public id: %s", api.Self.Id())
+	color.Green("My Nick: %s", safepool.Self.Nick)
+	color.Green("My Public id: %s", safepool.Self.Id())
 }

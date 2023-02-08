@@ -5,7 +5,6 @@ import (
 	"path"
 
 	"github.com/adrg/xdg"
-	"github.com/code-to-go/safepool/api"
 	"github.com/sirupsen/logrus"
 )
 
@@ -32,6 +31,6 @@ func main() {
 	parseFlags()
 
 	dbPath := path.Join(xdg.ConfigHome, dbName)
-	api.Start(dbPath)
+	safepool.Start(dbPath)
 	SelectMain()
 }

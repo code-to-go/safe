@@ -1,9 +1,9 @@
-module github.com/code-to-go/safepool/benxi
+module github.com/code-to-go/safe/benxi
 
 go 1.19
 
 require (
-	github.com/code-to-go/safepool v0.0.0-20221204074106-fddb13a9e99b
+	github.com/code-to-go/safe/safepool v0.0.0-20221204074106-fddb13a9e99b
 	github.com/fatih/color v1.13.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/sirupsen/logrus v1.9.0

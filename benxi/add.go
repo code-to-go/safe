@@ -1,10 +1,9 @@
 package main
 
 import (
-	"github.com/code-to-go/safepool/api"
-	"github.com/code-to-go/safepool/core"
-	"github.com/code-to-go/safepool/pool"
-	"github.com/code-to-go/safepool/security"
+	"github.com/code-to-go/safe/safepool/core"
+	"github.com/code-to-go/safe/safepool/pool"
+	"github.com/code-to-go/safe/safepool/security"
 	"github.com/fatih/color"
 	"github.com/manifoldco/promptui"
 )
@@ -22,7 +21,7 @@ func AddExisting() {
 			return
 		}
 
-		token, err := pool.DecodeToken(api.Self, t)
+		token, err := pool.DecodeToken(safepool.Self, t)
 		if core.IsErr(err, "invalid token: %v") {
 			continue
 		}
