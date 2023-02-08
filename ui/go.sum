@@ -66,10 +66,10 @@ github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5P
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cloudflare/cloudflare-go v0.14.0/go.mod h1:EnwdgGMaFOruiPZRFSgn+TsQ3hQ7C/YWzIGLeu5c304=
-github.com/code-to-go/safepool.lib v0.0.0-20221201114226-58d3e03c996d h1:KNaqJUu92ZWpLfXQUT+WvfGRbQhTirvvMC2ASBsJQfQ=
-github.com/code-to-go/safepool.lib v0.0.0-20221201114226-58d3e03c996d/go.mod h1:7IPofQRBiK38TJBn3ZKhEHRFU3pACvDO+mbF4YpMnfo=
-github.com/code-to-go/safepool.lib v0.0.0-20221205180519-ee25e63c226e h1:a3KrjbXqW00v2KHjlJ9dPw8x6iNMYqw3Xtuf+9o5t6g=
-github.com/code-to-go/safepool.lib v0.0.0-20221205180519-ee25e63c226e/go.mod h1:7IPofQRBiK38TJBn3ZKhEHRFU3pACvDO+mbF4YpMnfo=
+github.com/code-to-go/safepool v0.0.0-20221201114226-58d3e03c996d h1:KNaqJUu92ZWpLfXQUT+WvfGRbQhTirvvMC2ASBsJQfQ=
+github.com/code-to-go/safepool v0.0.0-20221201114226-58d3e03c996d/go.mod h1:7IPofQRBiK38TJBn3ZKhEHRFU3pACvDO+mbF4YpMnfo=
+github.com/code-to-go/safepool v0.0.0-20221205180519-ee25e63c226e h1:a3KrjbXqW00v2KHjlJ9dPw8x6iNMYqw3Xtuf+9o5t6g=
+github.com/code-to-go/safepool v0.0.0-20221205180519-ee25e63c226e/go.mod h1:7IPofQRBiK38TJBn3ZKhEHRFU3pACvDO+mbF4YpMnfo=
 github.com/consensys/bavard v0.1.8-0.20210406032232-f3452dc9b572/go.mod h1:Bpd0/3mZuaj6Sj+PqrmIquiOKy397AKGThQPaGzNXAQ=
 github.com/consensys/gnark-crypto v0.4.1-0.20210426202927-39ac3d4b3f1f/go.mod h1:815PAHg3wvysy0SyIqanF8gZ0Y1wjk/hrDHD/iT88+Q=
 github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d/go.mod h1:maD7wRr/U5Z6m/iR4s+kqSMx2CaBsrgA7czyZG/E6dU=

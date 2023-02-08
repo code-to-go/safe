@@ -1,7 +1,7 @@
 go 1.19
 
 use (
-	./lib
+	./safepool
 	./ui
-	./cli
+	./benxi
 )

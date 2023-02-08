@@ -7,13 +7,13 @@ import (
 	"strconv"
 
 	"github.com/adrg/xdg"
-	"github.com/code-to-go/safepool.lib/api"
-	"github.com/code-to-go/safepool.lib/api/chat"
-	"github.com/code-to-go/safepool.lib/api/library"
-	"github.com/code-to-go/safepool.lib/core"
-	"github.com/code-to-go/safepool.lib/pool"
-	"github.com/code-to-go/safepool.lib/security"
-	"github.com/code-to-go/safepool.lib/transport"
+	"github.com/code-to-go/safepool/api"
+	"github.com/code-to-go/safepool/apps/chat"
+	"github.com/code-to-go/safepool/apps/library"
+	"github.com/code-to-go/safepool/core"
+	"github.com/code-to-go/safepool/pool"
+	"github.com/code-to-go/safepool/security"
+	"github.com/code-to-go/safepool/transport"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
@@ -106,7 +106,8 @@ func (a *App) CreatePool(config string) (string, error) {
 }
 
 func (a *App) AddPool(token string) error {
-	return api.AddPool(token)
+	_, err := api.AddPool(token)
+	return err
 }
 
 func (a *App) GetMessages(poolName string, afterIdS string, beforeIdS string, limit int) ([]chat.Message, error) {
@@ -126,10 +127,10 @@ func (a *App) GetMessages(poolName string, afterIdS string, beforeIdS string, li
 	return nil, fmt.Errorf("invalid pool '%s'", poolName)
 }
 
-func (a *App) PostMessage(poolName string, content string, contentType string, attachements [][]byte) (string, error) {
+func (a *App) PostMessage(poolName string, text string, contentType string, binary []byte) (string, error) {
 	if p, ok := pools[poolName]; ok {
 		c := chat.Get(p, "chat")
-		id, err := c.SendMessage(content, contentType, attachements)
+		id, err := c.SendMessage(contentType, text, binary)
 		if core.IsErr(err, "cannot post chat message: %v") {
 			return "", err
 		}

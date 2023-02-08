@@ -39,7 +39,7 @@ class AddPool extends StatelessWidget {
               Expanded(
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.pushNamed(context, "import");
+                    Navigator.pushNamed(context, "/addPool/import");
                   },
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,

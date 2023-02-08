@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/code-to-go/safepool.lib/core"
-	"github.com/code-to-go/safepool.lib/pool"
+	"github.com/code-to-go/safepool/core"
+	"github.com/code-to-go/safepool/pool"
 	"github.com/fatih/color"
 	"github.com/manifoldco/promptui"
 )

@@ -1,6 +1,9 @@
+import 'package:caspian/apps/chat.dart';
 import 'package:caspian/pool/addpool.dart';
 import 'package:caspian/pool/addpool_create.dart';
-import 'package:caspian/pool/poolist.dart';
+import 'package:caspian/pool/addpool_import.dart';
+import 'package:caspian/pool/pool.dart';
+import 'package:caspian/pool/home.dart';
 import 'package:caspian/settings/settings.dart';
 import 'package:flutter/material.dart';
 
@@ -17,10 +20,13 @@ class CaspianApp extends StatelessWidget {
       ),
       initialRoute: "/",
       routes: {
-        "/": (context) => const PoolList(),
+        "/": (context) => const Home(),
         "/addPool": (context) => const AddPool(),
         "/addPool/create": (context) => const CreatePool(),
+        "/addPool/import": (context) => const ImportPool(),
         "/settings": (context) => const Settings(),
+        "/pool": (context) => const Pool(),
+        "/apps/chat": (context) => const Chat(),
       },
     );
   }

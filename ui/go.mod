@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/adrg/xdg v0.4.0
-	github.com/code-to-go/safepool.lib v0.0.0-20221205180519-ee25e63c226e
+	github.com/code-to-go/safepool v0.0.0-20221205180519-ee25e63c226e
 	github.com/sirupsen/logrus v1.9.0
 	github.com/wailsapp/wails/v2 v2.3.1
 	gopkg.in/yaml.v3 v3.0.1

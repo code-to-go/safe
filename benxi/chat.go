@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/code-to-go/safepool.lib/api/chat"
-	"github.com/code-to-go/safepool.lib/core"
-	"github.com/code-to-go/safepool.lib/pool"
+	"github.com/code-to-go/safepool/apps/chat"
+	"github.com/code-to-go/safepool/core"
+	"github.com/code-to-go/safepool/pool"
 	"github.com/fatih/color"
 	"github.com/manifoldco/promptui"
 )
@@ -107,8 +107,8 @@ func createChat(c chat.Chat) {
 
 func processToken(c chat.Chat, m chat.Message, tokens []pool.Token) []pool.Token {
 	selfId := c.Pool.Self.Id()
-	if strings.HasPrefix(m.Content, selfId) {
-		tk := m.Content[len(selfId)+1:]
+	if strings.HasPrefix(m.Text, selfId) {
+		tk := m.Text[len(selfId)+1:]
 		t, err := pool.DecodeToken(c.Pool.Self, tk)
 		if err == nil {
 			tokens = append(tokens, t)
@@ -172,9 +172,9 @@ func Chat(p *pool.Pool) {
 			}
 
 			if m.Author == selfId {
-				color.Blue("%s: %s", id2nick[m.Author], m.Content)
+				color.Blue("%s: %s", id2nick[m.Author], m.Text)
 			} else {
-				color.Green("\t%s: %s", id2nick[m.Author], m.Content)
+				color.Green("\t%s: %s", id2nick[m.Author], m.Text)
 			}
 			if m.Id > lastId {
 				lastId = m.Id

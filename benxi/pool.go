@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/code-to-go/safepool.lib/api"
-	"github.com/code-to-go/safepool.lib/pool"
+	"github.com/code-to-go/safepool/api"
+	"github.com/code-to-go/safepool/pool"
 	"github.com/fatih/color"
 	"github.com/manifoldco/promptui"
 )

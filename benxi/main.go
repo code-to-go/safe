@@ -5,7 +5,7 @@ import (
 	"path"
 
 	"github.com/adrg/xdg"
-	"github.com/code-to-go/safepool.lib/api"
+	"github.com/code-to-go/safepool/api"
 	"github.com/sirupsen/logrus"
 )
 

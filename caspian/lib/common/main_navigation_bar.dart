@@ -18,7 +18,7 @@ class MainNavigatorBar extends StatelessWidget {
         }
       },
       items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Pools'),
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
         BottomNavigationBarItem(icon: Icon(Icons.settings), label: "Settings")
       ],
     );
